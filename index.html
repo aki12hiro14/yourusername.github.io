@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Water Fixed</title>
+<title>CRAB BOSS ADVENTURE Start Fixed</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -238,7 +238,7 @@ canvas {
   color:#fff;
   font-family:system-ui, sans-serif;
   text-align:center;
-  pointer-events:none;
+  pointer-events:auto;
 }
 #startOverlayInner {
   border:2px solid rgba(255,255,255,.75);
@@ -276,7 +276,7 @@ canvas {
 <div id="startOverlay">
   <div id="startOverlayInner">
     <h1>🦀 CRAB BOSS</h1>
-    <p>スティックかJUMPでスタート</p>
+    <p>画面をタップしてスタート</p>
     <p>🔥 くるくる攻撃　❄️ こおり</p><p>🪶 モモンガ：JUMP長押しで滑空</p>
   </div>
 </div>
@@ -334,7 +334,10 @@ const sndPipePop = ()=>{
 
 // ── AUDIO ──────────────────────────────────────────
 let AC=null;
-function initAudio(){ if(!AC) AC=new(window.AudioContext||window.webkitAudioContext)(); }
+function initAudio(){ 
+  if(!AC) AC=new(window.AudioContext||window.webkitAudioContext)(); 
+  if(AC && AC.state==='suspended') AC.resume();
+}
 function tone(f,d=.1,type='square',vol=.18,delay=0){
   if(!AC) return;
   try{
@@ -439,7 +442,45 @@ function clearSavedProgress(){
 }
 function hideStartOverlay(){
   const el=document.getElementById('startOverlay');
-  if(el) el.classList.add('hidden');
+  if(el){
+    el.classList.add('hidden');
+    el.style.display='none';
+    el.style.pointerEvents='none';
+  }
+}
+
+
+// スマホ音声ロック解除：最初のタップでAudioContextを必ず復帰
+function unlockAudioOnce(){
+  initAudio();
+  if(AC && AC.state==='suspended') AC.resume();
+}
+['touchstart','pointerdown','mousedown','keydown'].forEach(ev=>{
+  window.addEventListener(ev, unlockAudioOnce, {passive:true});
+});
+
+
+function startGameFromUserAction(){
+  initAudio();
+  startBGM();
+  hideStartOverlay();
+  if(gameState==='title' || gameState==='gameover'){
+    resetGame();
+    gameState='play';
+  }
+}
+
+
+function setupStartOverlay(){
+  const el=document.getElementById('startOverlay');
+  if(!el) return;
+  const start=(e)=>{
+    if(e) e.preventDefault();
+    startGameFromUserAction();
+  };
+  el.addEventListener('touchstart',start,{passive:false});
+  el.addEventListener('pointerdown',start,{passive:false});
+  el.addEventListener('click',start);
 }
 
 // ── TILE GRID ──────────────────────────────────────
@@ -693,7 +734,7 @@ function resetGame(){
 const keys={};
 let stickPowerX=0;
 document.addEventListener('keydown',e=>{
-  initAudio(); startBGM(); hideStartOverlay(); keys[e.code]=true;
+  startGameFromUserAction(); keys[e.code]=true;
   if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
   // フルスクリーン閲覧中はどのキーでも閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
@@ -702,7 +743,7 @@ document.addEventListener('keydown',e=>{
 });
 document.addEventListener('keyup',e=>keys[e.code]=false);
 canvas.addEventListener('click',e=>{
-  initAudio();
+  startGameFromUserAction();
   // フルスクリーン閲覧中はクリックで閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
@@ -717,7 +758,7 @@ function bindTouchButton(id, code){
   if(!btn) return;
   const on=e=>{
     e.preventDefault();
-    initAudio(); startBGM(); hideStartOverlay();
+    startGameFromUserAction();
     keys[code]=true;
     if(gameState==='title'||gameState==='gameover'){
       resetGame(); gameState='play';
@@ -753,7 +794,7 @@ function setupVirtualStick(){
   };
 
   const moveStick=(clientX,clientY)=>{
-    initAudio(); startBGM(); hideStartOverlay();
+    startGameFromUserAction();
     if(gameState==='title'||gameState==='gameover'){
       resetGame(); gameState='play';
     } else if(gameState==='win'){
@@ -818,6 +859,7 @@ function setupVirtualStick(){
   });
 }
 
+setupStartOverlay();
 setupVirtualStick();
 bindTouchButton('jumpBtn','Space');
 bindTouchButton('fireBtn','KeyZ');
