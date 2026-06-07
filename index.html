@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Water Easy</title>
+<title>CRAB BOSS ADVENTURE UX Fixed</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -335,7 +335,22 @@ canvas {
   box-shadow:0 0 18px rgba(255,215,0,.28);
 }
 .stageBtn.locked {
-  opacity:.45;
+  opacity:.40;
+  cursor:not-allowed;
+}
+.stageBtn:disabled {
+  opacity:.40;
+  cursor:not-allowed;
+}
+.stageBtn.stage3 {
+  background:rgba(255,80,0,.22);
+  color:#ff9944;
+  box-shadow:0 0 18px rgba(255,80,0,.28);
+}
+.stageBtn.stage4 {
+  background:rgba(180,0,255,.22);
+  color:#cc88ff;
+  box-shadow:0 0 18px rgba(180,0,255,.28);
 }
 
 </style>
@@ -349,17 +364,37 @@ canvas {
     <div id="tapStart">▶ ここをタップしてスタート</div>
     <p>画面中央をタップすると始まります</p>
     <p>🕹️ MOVE　JUMP　🔥くるくる　❄️こおり</p>
-    <p>🪶 モモンガ：JUMP長押しで滑空</p><p>1面クリア後に2面へ進みます</p>
+    <p style="line-height:1.7;text-align:left;display:inline-block;">
+      🌊 <b>1面</b>：地上と水の冒険<br>
+      🪶 <b>2面</b>：モモンガで空を飛べ<br>
+      🌋 <b>3面</b>：氷で溶岩王を弱体化<br>
+      ⭐ <b>4面</b>：すべての力で最終決戦
+    </p>
   </div>
 </div>
 
 <div id="stageSelectOverlay">
   <div id="stageSelectInner">
     <h1>🦀 STAGE SELECT</h1>
-    <p>1面クリア後は2面から遊べます</p>
-    <button id="stage1Btn" class="stageBtn">▶ 1面から遊ぶ</button>
-    <button id="stage2Btn" class="stageBtn stage2">🪶 2面から遊ぶ</button>
-    <p style="font-size:12px;opacity:.8;">ハートが全部なくなったら1面からやり直し</p>
+    <p id="stageSelectDesc">クリアしたステージから選べます</p>
+    <p style="font-size:11px;opacity:.75;margin:0 0 6px;">🌊1面 🪶2面 🌋3面 ⭐4面（最終）</p>
+    <button id="stage1Btn" class="stageBtn">
+      🌊 1面 <span id="s1badge"></span><br>
+      <span style="font-size:11px;opacity:.8;">地上と水の冒険</span>
+    </button>
+    <button id="stage2Btn" class="stageBtn stage2">
+      🪶 2面 <span id="s2badge"></span><br>
+      <span style="font-size:11px;opacity:.8;">モモンガで空を飛べ</span>
+    </button>
+    <button id="stage3Btn" class="stageBtn stage3">
+      🌋 3面 <span id="s3badge"></span><br>
+      <span style="font-size:11px;opacity:.8;">氷で溶岩王を弱体化</span>
+    </button>
+    <button id="stage4Btn" class="stageBtn stage4">
+      ⭐ 4面 <span id="s4badge"></span><br>
+      <span style="font-size:11px;opacity:.8;">すべての力で最終決戦</span>
+    </button>
+    <p style="font-size:11px;opacity:.7;margin-top:6px;">ハートが全部なくなったら1面からやり直し</p>
   </div>
 </div>
 
@@ -409,6 +444,7 @@ const PIPE_DEFS = [
   {x:145*T+8, pipeTopY: (GR-2)*T},   // パイプ4
 ];
 let pipeTimers=[], pipeWarn=[];
+let geyserTimers=[]; // 3面溶岩火柱タイマー
 const sndPipePop = ()=>{
   tone(180,.05,'square',.22);
   tone(280,.07,'square',.20,.05);
@@ -527,6 +563,7 @@ function loadProgressIntoPlayer(){
 }
 function clearSavedProgress(){
   localStorage.removeItem('crabSave');
+  savedProgress=null;
 }
 function hideStartOverlay(){
   const el=document.getElementById('startOverlay');
@@ -552,7 +589,14 @@ function startGameFromUserAction(){
   initAudio();
   startBGM();
   hideStartOverlay();
-  if(gameState==='title' && stage2Unlocked){
+  // ゲームオーバーまたはタイトルで、2面が解放済みなら必ずステージ選択を挟む
+  if((gameState==='title' || gameState==='gameover') && stage2Unlocked){
+    if(gameState==='gameover'){
+      // ゲームオーバー後: セーブ消去してからステージ選択へ
+      currentStage=1;
+      clearSavedProgress();
+      gameState='title';
+    }
     showStageSelect();
     return;
   }
@@ -577,20 +621,43 @@ function setupStartOverlay(){
 
 
 function showStageSelect(){
+  // CLEARバッジを更新
+  const b1b=document.getElementById('s1badge');
+  const b2b=document.getElementById('s2badge');
+  const b3b=document.getElementById('s3badge');
+  const b4b=document.getElementById('s4badge');
+  if(b1b) b1b.textContent = stage2Unlocked ? '✅ CLEAR' : '';
+  if(b2b) b2b.textContent = stage3Unlocked ? '✅ CLEAR' : stage2Unlocked ? '' : '🔒';
+  if(b3b) b3b.textContent = stage4Unlocked ? '✅ CLEAR' : stage3Unlocked ? '' : '🔒';
+  if(b4b) b4b.textContent = stage4Unlocked ? '⭐ CLEAR' : '🔒';
+
   const el=document.getElementById('stageSelectOverlay');
   const b2=document.getElementById('stage2Btn');
+  const b3=document.getElementById('stage3Btn');
   if(!el) return;
   stageSelectMode=true;
   el.style.display='flex';
+  // ── textContent上書きをやめてclassとdisabledだけ更新 ──
   if(b2){
     if(stage2Unlocked){
-      b2.classList.remove('locked');
-      b2.textContent='🪶 2面から遊ぶ';
-      b2.disabled=false;
-    }else{
-      b2.classList.add('locked');
-      b2.textContent='🔒 2面は1面クリア後';
-      b2.disabled=true;
+      b2.classList.remove('locked'); b2.disabled=false;
+    } else {
+      b2.classList.add('locked'); b2.disabled=true;
+    }
+  }
+  if(b3){
+    if(stage3Unlocked){
+      b3.style.display='block'; b3.classList.remove('locked'); b3.disabled=false;
+    } else {
+      b3.style.display='none';
+    }
+  }
+  const b4=document.getElementById('stage4Btn');
+  if(b4){
+    if(stage4Unlocked){
+      b4.style.display='block'; b4.classList.remove('locked'); b4.disabled=false;
+    } else {
+      b4.style.display='none';
     }
   }
 }
@@ -601,30 +668,61 @@ function hideStageSelect(){
 }
 function startFromStage(stageNo){
   initAudio();
-  startBGM();
+  if(stageNo===3) startBGM(); else startBGM(); // BGMは共通
   hideStartOverlay();
   hideStageSelect();
-  resetGame();
+
+  // 明示的に選んだステージから開始する。
+  // ここで古いセーブに引っ張られないように savedProgress を消す。
+  clearSavedProgress();
+
+  if(stageNo===4){
+    if(!stage4Unlocked) return;
+    currentStage=4;
+    resetGame();
+    if(typeof startStage4 === 'function') startStage4();
+    gameState='play';
+    return;
+  }
+  if(stageNo===3){
+    if(!stage3Unlocked) return;
+    currentStage=3;
+    resetGame();
+    if(typeof startStage3 === 'function') startStage3();
+    gameState='play';
+    return;
+  }
   if(stageNo===2){
     if(!stage2Unlocked) return;
+    currentStage=2;
+    resetGame();
     if(typeof startStage2 === 'function'){
-      stage2Unlocked=true; localStorage.setItem('crabStage2Unlocked','1');
-      gameState='title'; showStageSelect();
+      startStage2();
     } else {
-      // フォールバック：2面開始地点へ直接移動
       player.x=48;
       player.y=0;
+      player.cape=true;
+      player.capeT=1200;
     }
+  } else {
+    currentStage=1;
+    resetGame();
   }
   gameState='play';
 }
 function setupStageSelect(){
   const b1=document.getElementById('stage1Btn');
   const b2=document.getElementById('stage2Btn');
+  const b3=document.getElementById('stage3Btn');
   if(b1) b1.addEventListener('click',e=>{e.preventDefault(); startFromStage(1);});
   if(b2) b2.addEventListener('click',e=>{e.preventDefault(); if(stage2Unlocked) startFromStage(2);});
+  if(b3) b3.addEventListener('click',e=>{e.preventDefault(); if(stage3Unlocked) startFromStage(3);});
+  const b4s=document.getElementById('stage4Btn');
+  if(b4s) b4s.addEventListener('click',e=>{e.preventDefault(); if(stage4Unlocked) startFromStage(4);});
   if(b1) b1.addEventListener('touchstart',e=>{e.preventDefault(); startFromStage(1);},{passive:false});
   if(b2) b2.addEventListener('touchstart',e=>{e.preventDefault(); if(stage2Unlocked) startFromStage(2);},{passive:false});
+  if(b3) b3.addEventListener('touchstart',e=>{e.preventDefault(); if(stage3Unlocked) startFromStage(3);},{passive:false});
+  if(b4s) b4s.addEventListener('touchstart',e=>{e.preventDefault(); if(stage4Unlocked) startFromStage(4);},{passive:false});
 }
 
 // ── TILE GRID ──────────────────────────────────────
@@ -732,9 +830,254 @@ function buildLevelStage1(){
 
 
 
+
+// ══════════════════════════════════════════════════════════════
+// STAGE 3: 地下溶岩洞窟
+// ══════════════════════════════════════════════════════════════
+function buildLevelStage3(){
+  tiles = new Uint8Array(LW*LH);
+
+  // ─ 床全体 ─
+  fillRect(0,GR,LW,LH-GR,SOLID);
+
+  // ─ 天井（洞窟感・凸凹） ─
+  for(let cx=0;cx<LW;cx++){
+    const h=2+Math.floor(Math.abs(Math.sin(cx*.35))*2);
+    for(let cy=0;cy<h;cy++) setTile(cx,cy,SOLID);
+  }
+
+  // ─ 溶岩ピット（SPIKE） ─
+  for(let lx=20;lx<=26;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=38;lx<=46;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=60;lx<=68;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=84;lx<=94;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=112;lx<=120;lx++) setTile(lx,GR,SPIKE);
+
+  // ─ 溶岩越え足場 ─
+  fillRow(GR-3,22,24,SOLID);
+  fillRow(GR-4,40,43,SOLID);
+  fillRow(GR-6,44,47,SOLID);
+  fillRow(GR-3,62,64,SOLID);
+  fillRow(GR-5,65,68,SOLID);
+  fillRow(GR-3,86,88,SOLID);
+  fillRow(GR-6,89,91,SOLID);
+  fillRow(GR-4,92,94,SOLID);
+
+  // ─ バネ ─
+  setTile(17,GR-1,SPRING);
+  setTile(37,GR-1,SPRING);
+  setTile(57,GR-1,SPRING);
+  setTile(83,GR-1,SPRING);
+
+  // ─ ？ブロック ─
+  setTile(5, GR-4,QBLK);   // cape
+  setTile(15,GR-4,QBLK);   // mushroom
+  setTile(41,GR-5,QBLK);   // mushroom
+  setTile(50,GR-4,QBLK);   // flower
+  setTile(63,GR-4,QBLK);   // flower
+  setTile(75,GR-4,QBLK);   // cape
+  setTile(100,GR-4,QBLK);  // ice
+  setTile(110,GR-4,QBLK);  // hammer
+
+  // ─ コイン ─
+  for(let x=2;x<18;x+=2)   setTile(x,GR-3,COIN);
+  for(let x=28;x<37;x+=2)  setTile(x,GR-3,COIN);
+  for(let x=48;x<58;x+=2)  setTile(x,GR-3,COIN);
+  for(let x=70;x<82;x+=2)  setTile(x,GR-3,COIN);
+  for(let x=96;x<110;x+=2) setTile(x,GR-3,COIN);
+
+  // ─ チェックポイント島 ─
+  fillRect(96,GR,14,LH-GR,SOLID);
+
+  // ─ ボスアリーナ ─
+  fillRect(126,GR,LW-126,LH-GR,BFLOOR);
+  // アリーナ内プラットフォーム
+  fillRow(GR-6,128,138,SOLID);
+  fillRow(GR-4,140,150,SOLID);
+  fillRow(GR-6,152,162,SOLID);
+  fillRow(GR-3,164,174,SOLID);
+  // アリーナ溶岩
+  for(let lx=130;lx<=136;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=153;lx<=159;lx++) setTile(lx,GR,SPIKE);
+}
+
+function startStage3(){
+  currentStage=3;
+  buildLevelStage3();
+
+  player.x=48; player.y=0;
+  player.vx=0; player.vy=0;
+  player.hp=3;
+  player.big=true; player.fire=false; player.cape=false;
+  player.invT=80; player.dead=false; player.deadT=0;
+
+  checkpointActivated=false;
+  checkpointX=0;
+  checkpointBig=false;
+  checkpointFire=false;
+
+  // MAGMA CRAB KING
+  if(typeof boss !== 'undefined' && boss){
+    boss.x=148*T;
+    boss.y=(GR-4)*T;
+    boss.hp=10; boss.maxHp=10;
+    boss.alive=true; boss.active=false;
+    boss._deadTimer=0;
+    boss.bubbleT=65;
+    boss.skyMode=false;
+    boss.magmaMode=true;
+    boss.shockT=0; boss.phase2=false;
+    boss.name='MAGMA CRAB KING';
+    boss._phase=1; boss._skyInit=false;
+    boss.barrelT=180;
+  }
+
+  camX=0; camY=0;
+  gameStartTime=Date.now(); clearTimeMs=0;
+  for(let i=0;i<16;i++){
+    const cx=Math.random()*W;
+    setTimeout(()=>{
+      if(gameState==='play'&&currentStage===3)
+        parts.push({x:camX+cx,y:camY+H,vx:(Math.random()-.5)*1.2,vy:-2.8-Math.random()*2,life:80,sz:4,col:['#ff4400','#ff8800','#ffcc00'][Math.floor(Math.random()*3)]});
+    }, i*80);
+  }
+  // 3面敵配置：火炎カニ（赤い通常カニ、火に強い）
+  enemies.push({x:28*T,y:(GR-1)*T,vx:-0.8,vy:0,w:14,h:12,alive:true,stomp:0,animT:0,frozen:0,carried:false,fireType:true});
+  enemies.push({x:50*T,y:(GR-1)*T,vx:0.8, vy:0,w:14,h:12,alive:true,stomp:0,animT:0,frozen:0,carried:false,fireType:true});
+  enemies.push({x:72*T,y:(GR-1)*T,vx:-0.9,vy:0,w:14,h:12,alive:true,stomp:0,animT:0,frozen:0,carried:false,fireType:true});
+  enemies.push({x:80*T,y:(GR-1)*T,vx:0.7, vy:0,w:14,h:12,alive:true,stomp:0,animT:0,frozen:0,carried:false,fireType:true});
+  enemies.push({x:108*T,y:(GR-1)*T,vx:-0.8,vy:0,w:14,h:12,alive:true,stomp:0,animT:0,frozen:0,carried:false,fireType:true});
+  logStageAttempt(3);
+  spawnFloat(player.x+player.w/2,player.y+20,'STAGE 3 START!','#ff9944');
+  spawnFloat(player.x+player.w/2,player.y+4,'🌋 MAGMA CAVE 🌋','#ff6622');
+  phaseFlashT=22; phaseFlashCol='rgba(255,80,0,';
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// STAGE 4: 総合ステージ（全能力を使うラスト）
+// 水エリア + 空中グライド + 溶岩 + ラスボス
+// ══════════════════════════════════════════════════════════════
+function buildLevelStage4(){
+  tiles = new Uint8Array(LW*LH);
+
+  // ─ 地面全体 ─
+  fillRect(0,GR,LW,LH-GR,SOLID);
+
+  // ─ Section1: 基本ゾーン（x=0-24） ─
+  setTile(5,GR-4,QBLK);   // cape
+  setTile(12,GR-4,QBLK);  // mushroom
+  setTile(17,GR-1,SPRING);
+  for(let x=2;x<22;x+=2) setTile(x,GR-3,COIN);
+
+  // ─ Section2: 水エリア（x=26-40） ─
+  for(let wy=GR;wy<LH;wy++) for(let wx=26;wx<=40;wx++) setTile(wx,wy,WATER);
+  for(let wx=28;wx<=38;wx++) setTile(wx,GR+2,SOLID);
+  for(let wx=29;wx<=37;wx++) setTile(wx,GR+1,COIN);
+  setTile(33,GR-4,QBLK); // 水上の？ブロック (flower)
+
+  // ─ Section3: 空中グライドゾーン（x=42-74） ─
+  fillRect(42,GR,33,LH-GR,AIR); // 地面なし
+  fillRow(GR-3,44,50,SOLID);
+  fillRow(GR-5,55,61,SOLID);
+  fillRow(GR-7,66,72,SOLID);
+  setTile(46,GR-4,QBLK); // cape
+  setTile(58,GR-6,QBLK); // cape
+  setTile(68,GR-8,QBLK); // djump
+  for(let x=44;x<73;x+=2) setTile(x,GR-2+Math.floor(x/10)%3,COIN);
+
+  // ─ Section4: 溶岩ゾーン（x=76-110） ─
+  for(let lx=80;lx<=88;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=96;lx<=104;lx++) setTile(lx,GR,SPIKE);
+  fillRow(GR-3,82,86,SOLID);
+  fillRow(GR-5,90,94,SOLID);
+  fillRow(GR-3,98,102,SOLID);
+  setTile(76,GR-1,SPRING);
+  setTile(84,GR-4,QBLK); // ice
+  setTile(92,GR-6,QBLK); // fire
+  setTile(100,GR-4,QBLK); // hammer
+
+  // ─ Section5: チェックポイント島（x=112-126） ─
+  fillRect(112,GR,16,LH-GR,SOLID);
+  setTile(116,GR-4,QBLK); // cape
+  setTile(122,GR-4,QBLK); // mushroom
+  for(let x=113;x<127;x+=2) setTile(x,GR-3,COIN);
+
+  // ─ ラスボスアリーナ（x=128-219） ─
+  fillRect(128,GR,LW-128,LH-GR,BFLOOR);
+  // 天井
+  fillRow(0,128,LW,SOLID); fillRow(1,128,LW,SOLID);
+  // 上部プラットフォーム（全能力で立ち回る）
+  fillRow(GR-8,130,145,SOLID);
+  fillRow(GR-5,148,163,SOLID);
+  fillRow(GR-8,166,181,SOLID);
+  fillRow(GR-5,184,199,SOLID);
+  // 溶岩ゾーン（アリーナ床）
+  for(let lx=132;lx<=140;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=149;lx<=157;lx++) setTile(lx,GR,SPIKE);
+  for(let lx=168;lx<=176;lx++) setTile(lx,GR,SPIKE);
+  // 水たまり（一部）
+  for(let wy=GR;wy<LH;wy++) for(let wx=186;wx<=194;wx++) setTile(wx,wy,WATER);
+  // アリーナ内？ブロック
+  setTile(134,GR-9,QBLK); // ice
+  setTile(152,GR-6,QBLK); // fire
+  setTile(170,GR-9,QBLK); // cape
+  setTile(188,GR-4,QBLK); // hammer
+}
+
+function startStage4(){
+  currentStage=4;
+  buildLevelStage4();
+
+  player.x=48; player.y=0;
+  player.vx=0; player.vy=0;
+  player.hp=3;
+  player.big=true; player.fire=false; player.cape=true; player.capeT=1200;
+  player.invT=80; player.dead=false; player.deadT=0;
+
+  checkpointActivated=false;
+  checkpointX=0; checkpointBig=false; checkpointFire=false;
+
+  // OMEGA CRAB KING：全フェーズの技を持つラスボス
+  if(typeof boss !== 'undefined' && boss){
+    boss.x=155*T;
+    boss.y=(GR-5)*T;
+    boss.hp=12; boss.maxHp=12;
+    boss.alive=true; boss.active=false;
+    boss._deadTimer=0;
+    boss.bubbleT=55; // 泡弾
+    boss.skyMode=true;  // 空中ジャンプあり
+    boss.magmaMode=true; // 火炎弾もある
+    boss.omegaMode=true; // 4面専用フラグ
+    boss.shockT=0; boss.phase2=false;
+    boss.name='OMEGA CRAB KING';
+    boss._phase=1; boss._skyInit=false;
+    boss.barrelT=150;
+  }
+
+  camX=0; camY=0;
+  gameStartTime=Date.now(); clearTimeMs=0;
+
+  // 4面イントロ：虹色パーティクル
+  for(let i=0;i<24;i++){
+    const cx=Math.random()*W;
+    const cols=['#ff4488','#ff8800','#ffef5a','#44ff88','#44aaff','#cc88ff'];
+    setTimeout(()=>{
+      if(gameState==='play'&&currentStage===4)
+        parts.push({x:camX+cx,y:camY+H*.5,vx:(Math.random()-.5)*2,vy:-2.5-Math.random()*2,life:90,sz:4,col:cols[i%6]});
+    },i*60);
+  }
+  spawnFloat(player.x+player.w/2,player.y+20,'STAGE 4 START!','#cc88ff');
+  spawnFloat(player.x+player.w/2,player.y+4,'⭐ FINAL STAGE ⭐','#ffffff');
+  phaseFlashT=25; phaseFlashCol='rgba(180,0,255,';
+  stage2HintT=200; // ケープ操作ヒントを再表示
+}
+
 // ── LEVEL DISPATCHER ──────────────────────────────
 function buildLevel(){
-  if(currentStage===2) buildLevelStage2();
+  if(currentStage===4) buildLevelStage4();
+  else if(currentStage===3) buildLevelStage3();
+  else if(currentStage===2) buildLevelStage2();
   else buildLevelStage1();
 }
 
@@ -749,8 +1092,9 @@ function buildLevelStage2(){
   setTile(17,GR-1,SPRING);
   for(let x=3;x<22;x+=2) setTile(x,GR-3,COIN);
 
-  // ─ First sky gap: 短い滑空 ─
+  // ─ First sky gap: 短い滑空（救済足場あり） ─
   fillRect(26,GR,22,LH-GR,AIR);
+  fillRow(GR-2,27,30,SOLID); // 救済足場：ケープ忘れても落ちにくい
   fillRow(GR-4,30,36,SOLID);
   fillRow(GR-6,40,46,SOLID);
   setTile(42,GR-7,QBLK);   // cape refill
@@ -822,6 +1166,19 @@ function saveRanking(name,score){
   return rank;
 }
 let scoreSubmitted=false;
+
+// ── ボス撃破共通処理 ─────────────────────────────────────
+function killBoss(pts){
+  const b=boss; const p=player;
+  hitStopT=12; // 撃破ヒットストップ（長め）
+  b.alive=false; b._dieX=b.x; b._dieY=b.y;
+  addParts(b.x+b.w/2,b.y+b.h/2,'#ff4400',30);
+  addParts(b.x+b.w/2,b.y+b.h/2,'#ffd700',20);
+  addParts(b.x+b.w/2,b.y+b.h/2,'#ffffff',12);
+  spawnFloat(b.x+b.w/2,b.y,String(pts),'#ffee00');
+  p.score+=pts; shakeX=12; shakeY=12;
+}
+
 function submitScore(){
   if(scoreSubmitted) return; 
   scoreSubmitted=true;
@@ -855,13 +1212,82 @@ function drawRanking(ox,oy,bw){
 }
 
 // Q-block item map
-const QITEMS = {
-  6:'mushroom', 12:'coin', 15:'flower',
-  30:'coin',    35:'cape',  46:'cape',
+// ステージ別？ブロック中身（x座標 → アイテム）
+const QITEMS_S1 = {
+  6:'mushroom', 12:'coin',    15:'flower',
+  30:'coin',    35:'cape',    46:'cape',
   73:'mushroom',74:'coin',
-  107:'flower', 110:'mini',  119:'djump', 122:'cape',
-  134:'hammer', 148:'magnet',150:'flower',152:'ice', 154:'coin',
+  107:'flower', 110:'mini',   119:'djump', 122:'cape',
+  134:'hammer', 148:'magnet', 150:'flower',152:'ice', 154:'coin',
 };
+const QITEMS_S2 = {
+  5:'cape',   10:'coin',  42:'cape',
+  55:'hammer',84:'ice',   96:'cape',  108:'cape', 113:'magnet',
+  132:'cape',
+};
+const QITEMS_S4 = {
+  5:'cape',   12:'mushroom', 33:'flower',
+  46:'cape',  58:'cape',     68:'djump',
+  84:'ice',   92:'flower',   100:'hammer',
+  116:'cape', 122:'mushroom',
+  134:'ice',  152:'flower',  170:'cape',  188:'hammer',
+};
+const QITEMS_S3 = {
+  5:'cape',   15:'mushroom', 41:'mushroom',
+  50:'flower',63:'flower',   75:'cape',
+  100:'ice',  110:'hammer',
+};
+function getQItem(tx){
+  if(currentStage===4) return QITEMS_S4[tx]||'coin';
+  if(currentStage===3) return QITEMS_S3[tx]||'coin';
+  if(currentStage===2) return QITEMS_S2[tx]||'coin';
+  return QITEMS_S1[tx]||'coin';
+}
+
+// ── MAP LOADER（データ駆動レベル読み込み） ────────────────
+// 文字 → タイルID 変換テーブル
+const MAP_CHARS = {
+  '.':AIR, '#':SOLID, 'B':BRICK, '?':QBLK, 'C':COIN,
+  'P':PTOP, 'p':PBOT, 'F':BFLOOR, 'X':SPIKE,
+  'S':SPRING, 'D':DASHPAD, 'W':WATER,
+};
+// 逆引き（エディタ用）
+const CHAR_FROM_TILE = {};
+Object.entries(MAP_CHARS).forEach(([c,id])=>{ if(!(id in CHAR_FROM_TILE)) CHAR_FROM_TILE[id]=c; });
+CHAR_FROM_TILE[AIR]='.';
+
+/**
+ * loadMap(rows)
+ * 文字列配列からタイルグリッドを構築する。
+ * rows[0] が y=0（一番上）、rows[rows.length-1] が最終行。
+ * 行の長さが LW より短い場合は右を AIR で埋める。
+ */
+function loadMap(rows){
+  tiles = new Uint8Array(LW*LH);
+  rows.forEach((row, y)=>{
+    if(y>=LH) return;
+    for(let x=0;x<LW;x++){
+      const ch = x<row.length ? row[x] : '.';
+      tiles[y*LW+x] = MAP_CHARS[ch] ?? AIR;
+    }
+  });
+}
+
+/**
+ * exportMap()
+ * 現在のタイルグリッドを文字列配列として返す（エディタ連携用）
+ */
+function exportMap(){
+  const rows=[];
+  for(let y=0;y<LH;y++){
+    let row='';
+    for(let x=0;x<LW;x++) row+=CHAR_FROM_TILE[tiles[y*LW+x]]??'.';
+    // 末尾の '.' を省略（コンパクト化）
+    row=row.replace(/\.+$/,'');
+    rows.push(row);
+  }
+  return rows;
+}
 
 // ── GAME OBJECTS ───────────────────────────────────
 let player, enemies, items, projs, parts, coinsDone, brokenQ, floatTxts, fireballs, iceballs, thrownEnemies, barrels, movPlats;
@@ -870,8 +1296,43 @@ let shakeX=0, shakeY=0, bossWarn=0;
 let checkpointX=0, checkpointActivated=false, checkpointBig=false, checkpointFire=false;
 let currentStage=1;
 let stage2Unlocked=localStorage.getItem('crabStage2Unlocked')==='1';
+let stage3Unlocked=localStorage.getItem('crabStage3Unlocked')==='1';
+let stage4Unlocked=localStorage.getItem('crabStage4Unlocked')==='1';
 let stageSelectMode=false;
-let stageTransitionT=0;
+let stage2HintT=0; // 2面モモンガ操作ヒント表示カウンタ
+let phaseFlashT=0, phaseFlashCol='rgba(255,100,0,';
+let finalPhaseT=0; // FINAL PHASE演出タイマー // フェーズ変化フラッシュ
+let hitStopT=0; // ヒットストップ（打撃時の一瞬フリーズ）フレーム数
+
+// ── テレメトリ（プレイデータ収集） ─────────────────────────
+const telemetry = {
+  deaths: [],          // [{x, stage, cause, tick}]
+  stageAttempts: [0,0,0,0], // 各面の挑戦回数
+  bossHits: 0,         // ボスを踏んだ回数
+  coinsTotal: 0,       // 取ったコイン総数（セッション）
+};
+function logDeath(cause){
+  const p=player;
+  telemetry.deaths.push({x:Math.round(p.x/16), stage:currentStage, cause, tick});
+}
+function logStageAttempt(stage){
+  if(stage>=1&&stage<=4) telemetry.stageAttempts[stage-1]++;
+}
+function dumpTelemetry(){
+  // コンソールにまとめて出力（開発者ツールで確認）
+  console.group('%c📊 CRAB BOSS TELEMETRY', 'color:#ffd700;font-weight:bold;font-size:14px');
+  console.log('死亡一覧:', telemetry.deaths);
+  // X座標ごとの死亡数ヒートマップ
+  const hm={};
+  telemetry.deaths.forEach(d=>{ const k=`${d.stage}面 x≈${d.x}`; hm[k]=(hm[k]||0)+1; });
+  const sorted=Object.entries(hm).sort((a,b)=>b[1]-a[1]).slice(0,10);
+  console.log('死亡ホットスポット(上位10):');
+  sorted.forEach(([k,v])=>console.log(`  ${k}: ${v}回 ${'💀'.repeat(Math.min(v,10))}`));
+  console.log('各面挑戦回数:', telemetry.stageAttempts.map((n,i)=>`${i+1}面:${n}回`).join(' / '));
+  console.log('ボス踏み回数:', telemetry.bossHits);
+  console.log('コイン取得総数:', telemetry.coinsTotal);
+  console.groupEnd();
+}
 
 let gameStartTime=0, clearTimeMs=0;
 let bestClearTime=Number(localStorage.getItem('crabBestClearTime')||0);
@@ -904,6 +1365,7 @@ function resetGame(){
     nextLifeScore:5000,
     djump:false, djumpUsed:false, cape:false, capeT:0, spinT:0, spinCD:0, glide:false, hammerT:0, wallT:0, wallDir:0, 
     inWater:false, swimT:0, bubbleT:0,
+    coyoteT:0, jumpBufT:0,
     combo:0, comboT:0, mini:false, miniT:0, magnet:false, magnetT:0,
   };
   enemies = [
@@ -953,11 +1415,41 @@ function resetGame(){
       {x:198*T,y:(GR-5)*T,w:3*T,h:T,vx:0,vy:.85,x0:198*T,y0:(GR-5)*T,range:2*T},
     ];
   }
+  if(currentStage===4){
+    movPlats=[
+      {x:44*T,y:(GR-3)*T,w:3*T,h:T,vx:1.0,vy:0,x0:44*T,y0:(GR-3)*T,range:4*T},
+      {x:66*T,y:(GR-6)*T,w:3*T,h:T,vx:0,vy:.8,x0:66*T,y0:(GR-6)*T,range:2*T},
+      {x:140*T,y:(GR-4)*T,w:3*T,h:T,vx:1.3,vy:0,x0:140*T,y0:(GR-4)*T,range:5*T},
+      {x:165*T,y:(GR-6)*T,w:3*T,h:T,vx:-1.2,vy:0,x0:165*T,y0:(GR-6)*T,range:5*T},
+      {x:183*T,y:(GR-4)*T,w:3*T,h:T,vx:0,vy:.9,x0:183*T,y0:(GR-4)*T,range:2*T},
+    ];
+  }
+  if(currentStage===3){
+    // 溶岩ピット越えの上下動く足場
+    movPlats=[
+      {x:84*T,y:(GR-4)*T,w:3*T,h:T,vx:0,vy:.7,x0:84*T,y0:(GR-4)*T,range:2*T},
+      {x:90*T,y:(GR-6)*T,w:3*T,h:T,vx:0,vy:-.7,x0:90*T,y0:(GR-6)*T,range:2*T},
+      // ボスアリーナ内
+      {x:135*T,y:(GR-5)*T,w:3*T,h:T,vx:1.2,vy:0,x0:135*T,y0:(GR-5)*T,range:4*T},
+      {x:160*T,y:(GR-4)*T,w:3*T,h:T,vx:-1.1,vy:0,x0:160*T,y0:(GR-4)*T,range:4*T},
+    ];
+  }
   coinsDone={}; brokenQ={}; scoreSubmitted=false;
+  if(currentStage===1) logStageAttempt(1);
   pipeTimers=PIPE_DEFS.map(()=>300+Math.floor(Math.random()*400));
   pipeWarn=PIPE_DEFS.map(()=>0);
+  // 3面：溶岩間欠泉タイマー（x座標, 発射間隔フレーム, 現在タイマー）
+  geyserTimers = (currentStage===3||currentStage===4) ? [
+    {tx:22,interval:110,t:60},   // pit1上
+    {tx:40,interval:90,t:20},    // pit2上
+    {tx:64,interval:120,t:80},   // pit3上
+    {tx:88,interval:100,t:40},   // pit4上（動く足場の下）
+  ] : [];
   camX=0; camY=0; tick=0;
-  shakeX=0; shakeY=0; bossWarn=0; bossIntroT=0; bossDefeatT=0; hudPulse=0;
+  shakeX=0; shakeY=0; bossWarn=0; bossIntroT=0; bossDefeatT=0; hudPulse=0; finalPhaseT=0;
+  stage2HintT=0;
+  phaseFlashT=0;
+  hitStopT=0;
   checkpointX=0; checkpointActivated=false; checkpointBig=false; checkpointFire=false;
   gameStartTime=Date.now(); clearTimeMs=0;
   if(savedProgress){ loadProgressIntoPlayer(); savedProgress=null; }
@@ -965,30 +1457,43 @@ function resetGame(){
 
 
 function startStage2FromStage1(){
-  const carryScore=player.score;
-  const carryCoins=player.coins;
-  const carryHp=Math.max(3,player.hp);
-  savedProgress={
-    stage:2,
-    x:48,
-    y:0,
-    hp:carryHp,
-    big:false,
-    fire:false,
-    coins:carryCoins,
-    score:carryScore,
-    iceReady:0,
-    cape:true,
-    capeT:900
-  };
-  resetGame();
-  gameState='play';
-  startBGM();
+  // 1面クリア後は2面ボス直行ではなく、ステージ選択画面へ。
+  stage2Unlocked=true;
+  localStorage.setItem('crabStage2Unlocked','1');
+  clearSavedProgress();
+
+  gameState='title';
+  stopBGM();
   bossWarn=0;
   bossDefeatT=0;
-  stageTransitionT=160;
-  spawnFloat(player.x+player.w/2,player.y+10,'STAGE 2: モモンガ・スカイロード','#ffef5a');
-  tone(660,.08,'square',.18); tone(880,.08,'square',.16,.08); tone(1320,.16,'square',.14,.16);
+
+  showStageSelect();
+  tone(660,.08,'square',.18); 
+  tone(880,.08,'square',.16,.08); 
+  tone(1320,.16,'square',.14,.16);
+}
+
+function startStage3FromStage2(){
+  stage3Unlocked=true;
+  localStorage.setItem('crabStage3Unlocked','1');
+  clearSavedProgress();
+  gameState='title'; stopBGM();
+  bossWarn=0; bossDefeatT=0;
+  showStageSelect();
+  tone(880,.08,'square',.18);
+  tone(1100,.08,'square',.16,.08);
+  tone(1320,.16,'square',.14,.16);
+}
+
+function startStage4FromStage3(){
+  stage4Unlocked=true;
+  localStorage.setItem('crabStage4Unlocked','1');
+  clearSavedProgress();
+  gameState='title'; stopBGM();
+  bossWarn=0; bossDefeatT=0;
+  showStageSelect();
+  tone(660,.08,'square',.18); tone(880,.08,'square',.16,.08);
+  tone(1100,.08,'square',.14,.16); tone(1320,.12,'square',.12,.24);
 }
 
 // ── INPUT ──────────────────────────────────────────
@@ -1001,7 +1506,7 @@ document.addEventListener('keydown',e=>{
   // フルスクリーン閲覧中はどのキーでも閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
-  else if(gameState==='win'){ gameState='title'; }
+  else if(gameState==='win'){ gameState='title'; if(stage2Unlocked) setTimeout(showStageSelect,80); }
 });
 document.addEventListener('keyup',e=>keys[e.code]=false);
 canvas.addEventListener('click',e=>{
@@ -1009,7 +1514,7 @@ canvas.addEventListener('click',e=>{
   // フルスクリーン閲覧中はクリックで閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
-  else if(gameState==='win'){ gameState='title'; }
+  else if(gameState==='win'){ gameState='title'; if(stage2Unlocked) setTimeout(showStageSelect,80); }
 });
 
 const key = c => !!keys[c];
@@ -1239,8 +1744,12 @@ function movePlayer(){
         spawnFloat(p.x+p.w/2,p.y-8,'深すぎる!','#9ee7ff');
         addParts(p.x+p.w/2,p.y+p.h/2,'#9ee7ff',18);
       }
-    } else if(p.y > GR*T+4 && !isSolid(getTile(cx, GR))){
-      hurtPlayer();
+    } else {
+      // 空中ステージでは、画面下まで完全に落ちてからダメージにする
+      const deathY = (LH * T) + 4;
+      if(p.y > deathY){
+        hurtPlayer();
+      }
     }
   }
 }
@@ -1256,7 +1765,7 @@ function hitBlock(tx,ty){
     const k=`${tx},${ty}`;
     if(!brokenQ[k]){
       brokenQ[k]=true; setTile(tx,ty,SOLID);
-      spawnItem(tx,ty,QITEMS[tx]||'coin'); sndQBlk();
+      spawnItem(tx,ty,getQItem(tx)); sndQBlk();
     }}
 }
 
@@ -1273,14 +1782,15 @@ function spawnItem(tx,ty,type){
 }
 
 function hurtPlayer(){
-  if(player.mini){ player.mini=false; player.miniT=0; player.dead=true; player.deadT=90; sndHurt(); return; }
+  if(player.mini){ player.mini=false; player.miniT=0; player.dead=true; player.deadT=90; sndHurt(); hitStopT=5; return; }
   if(player.invT>0) return;
   if(player.fire){ player.fire=false; player.invT=120; sndHurt(); return; } // fire→big
   if(player.cape){ player.cape=false; player.capeT=0; player.invT=120; sndHurt(); return; } // cape loss
-  if(player.big){ player.big=false; player.invT=120; sndHurt(); }
+  if(player.big){ player.big=false; player.invT=120; sndHurt(); hitStopT=5; }
   else {
     player.dead=true; player.vy=-8; player.vx=0; player.deadT=120;
-    player.hp--; sndDie();
+    player.hp--; sndDie(); hitStopT=8;
+    logDeath('enemy/spike');
   }
 }
 
@@ -1302,37 +1812,70 @@ function findSafeRespawnX(nearX){
 
 function startStage2(){
   // 2面から開始する時の初期化。1面は壊さず、2面用の初期位置へ移動。
-  if(typeof buildStage2 === 'function'){
-    buildStage2();
-    if(typeof currentStage !== 'undefined') currentStage=2;
-    player.x=48; player.y=0;
-  } else {
-    // true_stage2版ではこの関数が無い場合もあるため、既存の2面開始座標へフォールバック
-    if(typeof currentStage !== 'undefined') currentStage=2;
-    player.x=48; player.y=0;
-  }
-  player.vx=0; player.vy=0;
+  currentStage=2;
+  buildLevelStage2();
+
+  player.x=48; 
+  player.y=0;
+  player.vx=0; 
+  player.vy=0;
   player.hp=3;
-  player.cape=true; player.capeT=900;
+  player.big=false; 
+  player.fire=false;
+  player.cape=true; 
+  player.capeT=1200;
+  player.invT=80;
+  player.dead=false;
+  player.deadT=0;
+
+  // 2面開始時はチェックポイントを初期化。死んだ時に中途半端な位置へ飛ばないようにする。
+  checkpointActivated=false;
+  checkpointX=0;
+  checkpointBig=false;
+  checkpointFire=false;
+
   // SKY CRAB KING setup：2面ボスは強化版
   if(typeof boss !== 'undefined' && boss){
-    boss.hp=8; boss.maxHp=8;
+    boss.x=170*T;
+    boss.y=(GR-4)*T;
+    boss.hp=8; 
+    boss.maxHp=8;
+    boss.alive=true;
+    boss.active=false;
+    boss._deadTimer=0;
     boss.bubbleT=100;
     boss.skyMode=true;
     boss.shockT=0;
     boss.phase2=false;
     boss.name='SKY CRAB KING';
   }
-  player.big=false; player.fire=false;
-  player.invT=80;
-  camX=0; camY=0;
+
+  camX=0; 
+  camY=0;
   gameStartTime=Date.now();
   clearTimeMs=0;
+  // 2面イントロ演出：空から星が降る
+  for(let i=0;i<20;i++){
+    const cx=Math.random()*W, delay=i*4;
+    setTimeout(()=>{
+      if(gameState==='play' && currentStage===2){
+        addParts(camX+cx,camY+Math.random()*H*.5,'#ffef5a',3);
+        parts.push({x:camX+cx,y:camY,vx:(Math.random()-.5)*.8,vy:1.4+Math.random()*.6,life:100,sz:3,col:['#ffef5a','#ffffff','#aaccff'][Math.floor(Math.random()*3)]});
+      }
+    },delay*16);
+  }
+  logStageAttempt(2);
   spawnFloat(player.x+player.w/2,player.y+20,'STAGE 2 START!','#ffef5a');
+  spawnFloat(player.x+player.w/2,player.y+4,'🪶 モモンガ フライト 🪶','#aaffff');
+  phaseFlashT=20; phaseFlashCol='rgba(100,200,255,'; // 青い開幕フラッシュ
+  // 操作ヒントタイマー（300フレーム=5秒）
+  stage2HintT=300;
 }
 
 // ── UPDATE ─────────────────────────────────────────
 function update(){
+  // ヒットストップ中はゲームロジックを止める（BGMだけ継続）
+  if(hitStopT>0){ hitStopT--; updateBGM(); return; }
   tick++;
   updateBGM();
   if(tick%180===0) saveProgress();
@@ -1341,14 +1884,15 @@ function update(){
 
   const p=player;
 
-  // Stage 2 checkpoint：2面だけの中間地点。1面の内容には触れない。
-  if(currentStage===2 && !checkpointActivated && p.x>104*T){
+  // Stage 2/3 checkpoint：各面の中間地点
+  const cpThresh = currentStage===4 ? 112*T : currentStage===3 ? 96*T : 104*T;
+  if((currentStage===2||currentStage===3||currentStage===4) && !checkpointActivated && p.x>cpThresh){
     checkpointActivated=true;
-    checkpointX=106*T;
+    checkpointX=(currentStage===4?114*T:currentStage===3?98*T:106*T);
     checkpointBig=p.big;
     checkpointFire=p.fire;
-    p.cape=true; p.capeT=900;
-    spawnFloat(p.x+p.w/2,p.y-18,'CHECK POINT! モモンガ補充','#00ff88');
+    p.cape=true; p.capeT=1200;
+    spawnFloat(p.x+p.w/2,p.y-18,currentStage===3?'CHECK POINT! 🌋':'CHECK POINT! モモンガ補充','#00ff88');
     addParts(p.x+p.w/2,p.y+p.h/2,'#00ff88',20);
     tone(523,.08,'square',.18); tone(659,.08,'square',.16,.08); tone(784,.16,'square',.14,.16);
   }
@@ -1357,12 +1901,22 @@ function update(){
   if(p.dead){
     p.vy+=GRAVITY; p.y+=p.vy; p.deadT--;
     if(p.deadT<=0){
-      if(p.hp<=0){ submitScore(); gameState='gameover'; return; }
+      if(p.hp<=0){ 
+        // ハートが全部なくなったら必ず1面からやり直し
+        currentStage=1;
+        checkpointActivated=false;
+        clearSavedProgress();
+        dumpTelemetry(); submitScore(); 
+        gameState='gameover'; 
+        return; 
+      }
       p.dead=false;
       if(checkpointActivated){
         p.x=checkpointX; p.y=(GR-2)*T;
         p.big=checkpointBig; p.fire=checkpointFire;
-        if(currentStage===2){ p.cape=true; p.capeT=900; }
+        if(currentStage===2){ p.cape=true; p.capeT=1200; }
+        if(currentStage===3){ p.fire=true; }
+        if(currentStage===4){ p.cape=true; p.capeT=1200; p.big=true; } // 4面リスポーン
         spawnFloat(p.x,p.y-10,currentStage===2?'復活! モモンガON':'復活!','#00ff88');
       } else {
         p.x=findSafeRespawnX(Math.max(16,camX+32));
@@ -1405,11 +1959,26 @@ function update(){
     p.vy=Math.min(13, p.vy+GRAVITY);
   }
 
+  // ── コヨーテタイム：直前まで地面にいたならジャンプ許可 ──
+  if(p.onGround){ p.coyoteT=6; }
+  else if(p.coyoteT>0){ p.coyoteT--; }
+
+  // ── ジャンプバッファ：着地前にジャンプを押してもOK ──
+  if(jump && !p.jumpHeld){ p.jumpBufT=8; }
+  if(p.jumpBufT>0){ p.jumpBufT--; }
+
   if(p.inWater){
     if(jump && !p.jumpHeld){ p.vy=-4.4; p.jumpHeld=true; sndJump(); }  // 水中泳ぎ
     if(!jump) p.jumpHeld=false;
   } else {
-    if(jump && p.onGround && !p.jumpHeld){ p.vy=JUMP_V*(p.mini?1.4:1); p.jumpHeld=true; p.djumpUsed=false; sndJump(); }
+    // 通常ジャンプ：コヨーテタイムもしくは着地中 + バッファ入力でも受け付ける
+    const canJump = p.onGround || p.coyoteT>0;
+    const wantsJump = (jump && !p.jumpHeld) || p.jumpBufT>0;
+    if(canJump && wantsJump && !p.jumpHeld){
+      p.vy=JUMP_V*(p.mini?1.4:1); p.jumpHeld=true; p.djumpUsed=false;
+      p.coyoteT=0; p.jumpBufT=0;
+      sndJump();
+    }
   }
   if(jump && !p.onGround && !p.jumpHeld && p.djump && !p.djumpUsed){
     p.vy=JUMP_V*.85; p.djumpUsed=true; p.jumpHeld=true;
@@ -1462,12 +2031,7 @@ function update(){
     if(boss && boss.alive && boss.active && overlap(sx,sy,sw,sh,boss.x,boss.y,boss.w,boss.h) && tick%8===0){
       boss.hp-=0.25; boss.hitT=12; shakeX=2; shakeY=2;
       addParts(p.x+p.w/2,p.y+p.h/2,'#ffd080',8);
-      if(boss.hp<=0){
-        boss.alive=false; boss._dieX=boss.x; boss._dieY=boss.y;
-        addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ff4400',30);
-        addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ffd700',20);
-        spawnFloat(boss.x+boss.w/2,boss.y,'5000','#ffee00'); p.score+=5000; shakeX=10; shakeY=10;
-      }
+      if(boss.hp<=0) killBoss(5000);
     }
   }
 
@@ -1528,8 +2092,8 @@ function update(){
         addParts(tx*T+8,tyB*T+8,'#c84b0a',10); p.score+=50; sndBreak();
       } else if(id===QBLK && !brokenQ[k]){
         brokenQ[k]=true; setTile(tx,tyB,SOLID);
-        spawnItem(tx,tyB-1,QITEMS[tx]||'coin'); sndQBlk();} else if(id===COIN && !coinsDone[k]){
-        coinsDone[k]=true; p.coins++; p.score+=100;
+        spawnItem(tx,tyB-1,getQItem(tx)); sndQBlk();} else if(id===COIN && !coinsDone[k]){
+        coinsDone[k]=true; p.coins++; p.score+=100; telemetry.coinsTotal++;
         spawnFloat(tx*T+8,(tyB-.5)*T,'100','#ffd700');
         addParts(tx*T+8,tyB*T,'#ffd700',4); sndCoin();
       }
@@ -1561,11 +2125,7 @@ function update(){
         spawnFloat(boss.x+boss.w/2,boss.y-8,'🔨HAMMER!','#ffcc00');
         addParts(boss.x+boss.w/2,boss.y,'#ff8800',16);
         sndHammer(); sndBossHit();
-        if(boss.hp<=0){ boss.alive=false; boss._dieX=boss.x; boss._dieY=boss.y;
-          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ff4400',30);
-          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ffd700',20);
-          spawnFloat(boss.x+boss.w/2,boss.y,'5000','#ffee00'); p.score+=5000; shakeX=10; shakeY=10;
-        }
+        if(boss.hp<=0) killBoss(5000);
       }
       for(let bi=barrels.length-1;bi>=0;bi--){
         const br=barrels[bi];
@@ -1641,7 +2201,7 @@ function update(){
         spawnFloat(it.x+7,it.y,'HAMMER!!','#ffcc00');
       }
       if(it.type==='cape'){
-        p.cape=true; p.capeT=900; p.score+=1000; sndCape();
+        p.cape=true; p.capeT=1200; p.score+=1000; sndCape();
         addParts(it.x+7,it.y+7,'#d8a15a',22); addParts(it.x+7,it.y+7,'#fff2aa',12);
         spawnFloat(it.x+7,it.y,'マント!','#ffd080');
       }
@@ -1781,6 +2341,23 @@ function update(){
   });
 
 
+  // ── 3面溶岩火柱（間欠泉）────────────────────────────────────
+  if(currentStage===3){
+    geyserTimers.forEach(g=>{
+      g.t--;
+      if(g.t<=0){
+        // 火柱噴出：SPIKEタイルの上に上向きプロジェクタイルを出す
+        const gx=g.tx*T+T/2;
+        const gy=(GR)*T;
+        projs.push({x:gx-4,y:gy-8,vx:0,vy:-4.5,w:8,h:10,life:28,kind:'geyser'});
+        addParts(gx,gy,'#ff4400',8);
+        addParts(gx,gy,'#ff8800',5);
+        tone(180,.06,'sawtooth',.18);
+        g.t=g.interval+Math.floor(Math.random()*40);
+      }
+    });
+  }
+
   // ── 動く足場 ──────────────────────────────────────────────────
   movPlats.forEach(mp=>{
     if(mp.vx){ mp.x+=mp.vx; if(Math.abs(mp.x-mp.x0)>mp.range){ mp.vx*=-1; mp.x=mp.x0+mp.range*Math.sign(mp.x-mp.x0); } }
@@ -1830,7 +2407,8 @@ function update(){
 
   // Boss
   if(boss.alive){
-    if(p.x>157*T && !boss.active){ boss.active=true; bossWarn=150; bossIntroT=150; shakeX=8; shakeY=8; tone(90,.35,'sawtooth',.30); tone(180,.18,'square',.22,.2); }
+    const bossActivateX = (currentStage===4) ? 150*T : (currentStage===3) ? 143*T : 157*T;
+    if(p.x>bossActivateX && !boss.active){ boss.active=true; bossWarn=150; bossIntroT=150; shakeX=8; shakeY=8; tone(90,.35,'sawtooth',.30); tone(180,.18,'square',.22,.2); }
     if(boss.active) updateBoss();
   }
 
@@ -1855,11 +2433,18 @@ function update(){
     enemies.forEach(e=>{
       if(!e.alive||e.stomp>0||hit) return;
       if(overlap(fb.x,fb.y,fb.w,fb.h,e.x,e.y,e.w,e.h)){
-        e.stomp=18; e.vy=-3; e.vx=0;
-        p.score+=300;
-        addParts(e.x+7,e.y+6,'#ff4400',10); addParts(e.x+7,e.y+6,'#ffcc00',8);
-        spawnFloat(e.x+7,e.y,'300','#ff8800');
-        sndEnemyDie(); hit=true;
+        if(e.fireType){
+          // 火炎カニ：ファイア無効！炎を弾く
+          addParts(e.x+7,e.y+2,'#ff8800',8);
+          spawnFloat(e.x+7,e.y,'🔥無効!','#ff6600');
+          hit=true; // ファイアボールは消える
+        } else {
+          e.stomp=18; e.vy=-3; e.vx=0;
+          p.score+=300;
+          addParts(e.x+7,e.y+6,'#ff4400',10); addParts(e.x+7,e.y+6,'#ffcc00',8);
+          spawnFloat(e.x+7,e.y,'300','#ff8800');
+          sndEnemyDie(); hit=true;
+        }
       }
     });
     if(hit){ fireballs.splice(i,1); }
@@ -1896,21 +2481,24 @@ function update(){
       addParts(boss.x+boss.w/2,boss.y+10,'#88ddff',14);
       addParts(boss.x+boss.w/2,boss.y+10,'#fff',8);
       sndFreeze();
-      if(boss.iceHits>=2){
+      const iceDmgThreshold = (boss.magmaMode) ? 1 : 2; // 3面ボスは氷1発でHP-1
+    const iceDmgAmt = (boss.magmaMode) ? 2 : 1;         // さらに2倍ダメージ
+    if(boss.iceHits>=iceDmgThreshold){
         boss.iceHits=0;
-        boss.hp--;
-        boss.hitT=50;
-        shakeX=4; shakeY=4;
-        spawnFloat(boss.x+boss.w/2,boss.y,'❄-1','#88ddff');
-        addParts(boss.x+boss.w/2,boss.y,'#66bbff',20);
-        sndBossHit();
-        if(boss.hp<=0){
-          boss.alive=false;
-          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#88ddff',30);
-          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ffd700',20);
-          spawnFloat(boss.x+boss.w/2,boss.y,'5000','#ffee00');
-          player.score+=5000;
+        boss.hp-=iceDmgAmt;
+        boss.hitT=boss.magmaMode?70:50;
+        shakeX=boss.magmaMode?8:4; shakeY=boss.magmaMode?8:4;
+        if(boss.magmaMode){
+          spawnFloat(boss.x+boss.w/2,boss.y,'❄❄ 弱点!! -'+iceDmgAmt,'#88ddff');
+          addParts(boss.x+boss.w/2,boss.y,'#88ddff',30);
+          addParts(boss.x+boss.w/2,boss.y,'#ffffff',15);
+          phaseFlashT=10; phaseFlashCol='rgba(100,180,255,';
+        } else {
+          spawnFloat(boss.x+boss.w/2,boss.y,'❄-1','#88ddff');
+          addParts(boss.x+boss.w/2,boss.y,'#66bbff',20);
         }
+        sndBossHit();
+        if(boss.hp<=0) killBoss(5000);
       } else {
         spawnFloat(boss.x+boss.w/2,boss.y,'❄','#88ddff');
       }
@@ -1949,6 +2537,16 @@ function update(){
       sndWin(); stopBGM(); bossDefeatT=180;
       if(currentStage===1){
         spawnFloat(boss.x+boss.w/2,boss.y-20,'STAGE 1 CLEAR!','#ffef5a');
+      } else if(currentStage===2){
+        spawnFloat(boss.x+boss.w/2,boss.y-20,'STAGE 2 CLEAR!','#ff9944');
+      } else if(currentStage===3){
+        spawnFloat(boss.x+boss.w/2,boss.y-20,'🌋 STAGE 3 CLEAR!! 🌋','#ff6622');
+        spawnFloat(boss.x+boss.w/2,boss.y-40,'MAGMA CRAB KING 撃破！','#ffcc00');
+        phaseFlashT=40; phaseFlashCol='rgba(255,100,0,';
+      } else if(currentStage===4){
+        spawnFloat(boss.x+boss.w/2,boss.y-20,'⭐ FINAL CLEAR!! ⭐','#cc88ff');
+        spawnFloat(boss.x+boss.w/2,boss.y-40,'OMEGA CRAB KING 撃破！','#ffffff');
+        phaseFlashT=60; phaseFlashCol='rgba(180,0,255,';
       } else {
         clearTimeMs=Date.now()-gameStartTime;
         lastClearIsBest=(!bestClearTime || clearTimeMs<bestClearTime);
@@ -1958,6 +2556,9 @@ function update(){
     }
     if(boss._deadTimer>180){
       if(currentStage===1){ startStage2FromStage1(); return; }
+      if(currentStage===2){ startStage3FromStage2(); return; }
+      if(currentStage===3){ startStage4FromStage3(); return; }
+      // currentStage===4: FINAL CLEAR
       submitScore(); gameState='win'; bossDefeatT=999999;
     }
   }
@@ -1984,10 +2585,41 @@ function updateBoss(){
   b.actT--;
 
   // SKY CRAB KING attacks：泡弾＋地面ドン衝撃波
-  if(b.skyMode && b.active && b.alive){
+  // MAGMA CRAB：火炎弾（skyModeと別系統）
+  if(b.magmaMode && b.active && b.alive && (!b.skyMode || b.omegaMode)){
+    const wasPhase2_mg=b.phase2;
     b.phase2 = b.hp <= Math.ceil(b.maxHp/2);
+    if(!wasPhase2_mg && b.phase2){ finalPhaseT=120; phaseFlashT=40; phaseFlashCol='rgba(255,0,0,'; }
+    if(!b.bubbleT) b.bubbleT=65;
+    b.bubbleT--;
+    if(b.bubbleT===28){ spawnFloat(b.x+b.w/2,b.y-14,'🔥！','#ff4400'); b._aimWarn=28; }
+    if(b._aimWarn>0) b._aimWarn--;
+    if(b.bubbleT<=0){
+      const dir=player.x>b.x?1:-1;
+      const shots=b.phase2?[-1.8,-0.4,1.0]:[-1.0,0.4];
+      shots.forEach((vy,i)=>{
+        projs.push({x:b.x+(dir>0?b.w:0),y:b.y+b.h/2-3+i*2,
+          vx:dir*(b.phase2?3.8:3.2),vy,w:9,h:8,life:80,kind:'fire'});
+      });
+      tone(220,.08,'sawtooth',.22);
+      b._aimWarn=0;
+      b.bubbleT=b.phase2?48:68;
+    }
+    if(b.shockT>0) b.shockT--;
+  }
+
+  if(b.skyMode && b.active && b.alive){
+    const wasPhase2_sky=b.phase2;
+    b.phase2 = b.hp <= Math.ceil(b.maxHp/2);
+    if(!wasPhase2_sky && b.phase2){ finalPhaseT=120; phaseFlashT=40; phaseFlashCol='rgba(200,50,255,'; }
     if(!b.bubbleT) b.bubbleT=90;
     b.bubbleT--;
+    // ─ 予備動作Tell：発射28フレーム前に「！」警告 ─
+    if(b.bubbleT===28){
+      spawnFloat(b.x+b.w/2,b.y-14,'💧！','#44aaff');
+      b._aimWarn=28; // 点滅カウンタ
+    }
+    if(b._aimWarn>0) b._aimWarn--;
     if(b.bubbleT<=0){
       const dir = player.x > b.x ? 1 : -1;
       const shots = b.phase2 ? [-2.0, -0.7, 0.8] : [-1.2, 0.2];
@@ -2003,6 +2635,7 @@ function updateBoss(){
         });
       });
       sndBubble();
+      b._aimWarn=0;
       b.bubbleT=b.phase2?58:82;
     }
     if(b.shockT>0) b.shockT--;
@@ -2035,9 +2668,27 @@ function updateBoss(){
   const newPhase=b.hp>=7?1:b.hp>=4?2:1>=b.hp?4:3;
   if((b._phase||1)!==newPhase){
     b._phase=newPhase;
-    if(newPhase===2){ shakeX=8;shakeY=8; spawnFloat(b.x+b.w/2,b.y,'PHASE 2!','#ff8800'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff8800',25); tone(120,.4,'sawtooth',.35); }
-    if(newPhase===3){ shakeX=12;shakeY=12; spawnFloat(b.x+b.w/2,b.y,'ENRAGE!!','#ff2200'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff2200',35); addParts(b.x+b.w/2,b.y+b.h/2,'#ffd700',20); tone(80,.5,'sawtooth',.40); tone(90,.3,'square',.30,.15); }
-    if(newPhase===4){ shakeX=15;shakeY=15; spawnFloat(b.x+b.w/2,b.y,'LAST STAND!!','#ff0000'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff0000',50); addParts(b.x+b.w/2,b.y+b.h/2,'#fff',30); tone(60,.6,'sawtooth',.45); }
+    if(newPhase===2){
+      shakeX=10;shakeY=10;
+      spawnFloat(b.x+b.w/2,b.y,'PHASE 2!','#ff8800');
+      addParts(b.x+b.w/2,b.y+b.h/2,'#ff8800',30); addParts(b.x+b.w/2,b.y+b.h/2,'#ffd700',15);
+      tone(120,.4,'sawtooth',.35); tone(150,.2,'square',.25,.15);
+      phaseFlashT=18; phaseFlashCol='rgba(255,140,0,';
+    }
+    if(newPhase===3){
+      shakeX=14;shakeY=14;
+      spawnFloat(b.x+b.w/2,b.y,'ENRAGE!!','#ff2200');
+      addParts(b.x+b.w/2,b.y+b.h/2,'#ff2200',40); addParts(b.x+b.w/2,b.y+b.h/2,'#ffd700',25); addParts(b.x+b.w/2,b.y+b.h/2,'#fff',15);
+      tone(80,.5,'sawtooth',.40); tone(90,.3,'square',.30,.15); tone(60,.2,'sawtooth',.25,.3);
+      phaseFlashT=24; phaseFlashCol='rgba(255,40,0,';
+    }
+    if(newPhase===4){
+      shakeX=18;shakeY=18;
+      spawnFloat(b.x+b.w/2,b.y,'LAST STAND!!','#ff0000');
+      addParts(b.x+b.w/2,b.y+b.h/2,'#ff0000',60); addParts(b.x+b.w/2,b.y+b.h/2,'#fff',40); addParts(b.x+b.w/2,b.y+b.h/2,'#ffee00',30);
+      tone(60,.6,'sawtooth',.45); tone(50,.4,'square',.35,.2); tone(40,.25,'sawtooth',.3,.4);
+      phaseFlashT=30; phaseFlashCol='rgba(255,0,0,';
+    }
   }
   // 泡エフェクト（HP低いほど頻繁に）
   if(b.hp<=6 && tick%(b.hp<=2?8:b.hp<=4?15:25)===0){
@@ -2077,6 +2728,9 @@ function updateBoss(){
       // フェーズ2：ストンプジャンプ or ランダム回避
       const r=Math.random();
       if(r<0.55 && onGround){
+        // ストンプTell: ジャンプ前に床ひび割れ予告
+        spawnFloat(b.x+b.w/2,b.y+b.h,'💥','#ff8800');
+        addParts(b.x+b.w/2,(byB)*T,'#ff4400',8);
         b.vy=-7; b.actT=110; sndShock(); // ストンプジャンプ
       } else if(r<0.75){
         b.vx=-b.vx; // 回避
@@ -2161,6 +2815,7 @@ function updateBoss(){
     const pts=gp?1000:500;
     spawnFloat(b.x+b.w/2,b.y-12,gp?'1000 x2!!':String(pts),'#ff8800');
     p.score+=pts; sndBossHit();
+    hitStopT=gp?7:4; telemetry.bossHits++;
     if(b.hp<=0){
       // ボス撃破：デスアニメ用に座標保存
       b.alive=false;
@@ -2327,6 +2982,30 @@ function drawPlayer(){
     }
   }
 
+  // ── ハンマーグロー：体の周りを金色に光らせる ──
+  if(p.hammerT>0){
+    const hFlash=Math.floor(tick/4)%2;
+    const hsx=Math.round(p.x-camX+shakeX), hsy=Math.round(p.y-camY+shakeY);
+    // 外側のオーラ
+    ctx.globalAlpha=0.35+hFlash*.2;
+    ctx.fillStyle=hFlash?'#ffee00':'#ff8800';
+    ctx.fillRect(hsx-5,hsy-5,p.w+10,p.h+10);
+    // 残り少ない時は赤く点滅（残り60フレーム以下）
+    if(p.hammerT<60){
+      ctx.globalAlpha=0.5+hFlash*.3;
+      ctx.fillStyle=hFlash?'#ff2200':'#ff8800';
+      ctx.fillRect(hsx-3,hsy-3,p.w+6,p.h+6);
+    }
+    ctx.globalAlpha=1;
+    // パーティクル（6フレームごと）
+    if(tick%6===0){
+      const hcols=['#ffee00','#ff8800','#ffcc44'];
+      parts.push({x:p.x+Math.random()*p.w,y:p.y+Math.random()*p.h,
+        vx:(Math.random()-.5)*1.5,vy:-1.5-Math.random(),
+        life:14,col:hcols[Math.floor(Math.random()*3)],sz:2});
+    }
+  }
+
   ctx.save();
   ctx.translate(Math.round(p.x-camX+shakeX), Math.round(p.y-camY+shakeY));
   if(p.dead){ ctx.translate(p.w/2,p.h/2); ctx.rotate(tick*.3); ctx.translate(-p.w/2,-p.h/2); }
@@ -2336,7 +3015,9 @@ function drawPlayer(){
   if(p.cape){
     ctx.save();
     const flap=Math.sin(tick*.35)*2;
-    ctx.fillStyle=p.spinT>0?'#ffd080':'#c98b3c';
+    const isCapeLow = p.capeT > 0 && p.capeT < 120;
+    const capeFlicker = isCapeLow && Math.floor(tick / 4) % 2 === 0;
+    ctx.fillStyle = capeFlicker ? '#ff4444' : (p.spinT>0 ? '#ffd080' : '#c98b3c');
     if(p.facing===1){
       ctx.fillRect(-8,5+flap,9,p.h-4);
       ctx.fillStyle='#fff2aa'; ctx.fillRect(-6,7+flap,5,2);
@@ -2400,6 +3081,19 @@ function drawPlayer(){
   else { ctx.fillStyle='#ffcc88'; ctx.fillRect(-2,armY+2,3,4); ctx.fillRect(12,armY+2,3,4); }
   ctx.restore();
 
+  // ── ハンマーアイコン：頭上に表示 ──
+  if(p.hammerT>0){
+    const hsx=Math.round(p.x-camX+shakeX), hsy=Math.round(p.y-camY+shakeY);
+    const pulse=Math.floor(tick/8)%2;
+    ctx.font=`${pulse?9:8}px monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    // 影
+    ctx.fillStyle='rgba(0,0,0,.6)';
+    ctx.fillText('🔨',hsx+p.w/2+1,hsy-7+1);
+    // 本体
+    ctx.fillText('🔨',hsx+p.w/2,hsy-7);
+  }
+
   // 持ち上げ中の敵を頭の上に描く（氷ブロック状態）
   if(p.carrying){
     const e=p.carrying;
@@ -2413,6 +3107,24 @@ function drawPlayer(){
 
 // Enemy (mini crab)
 function drawEnemy(e){
+  if(e.fireType){
+    // 火炎カニ：赤橙の配色
+    const sx=Math.round(e.x-camX+shakeX), sy=Math.round(e.y-camY+shakeY);
+    const bob=Math.sin(e.animT*.18)*1.2;
+    const fc=Math.floor(e.animT/6)%2?'#cc2200':'#ff4400';
+    ctx.fillStyle=fc; ctx.fillRect(sx+1,sy+bob,e.w-2,e.h-3);
+    ctx.fillStyle='#ff8800'; ctx.fillRect(sx+3,sy+3+bob,e.w-6,3);
+    // 炎エフェクト（頭上）
+    ctx.fillStyle=`rgba(255,${100+Math.floor(Math.sin(e.animT*.3)*60)},0,.7)`;
+    ctx.fillRect(sx+4,sy-3+bob,2,3); ctx.fillRect(sx+8,sy-4+bob,2,4); ctx.fillRect(sx+12,sy-2+bob,2,2);
+    // 脚
+    ctx.fillStyle='#aa1100';
+    for(let i=0;i<3;i++) ctx.fillRect(sx+3+i*3,sy+e.h-2+bob+Math.sin(e.animT*.2+i)*1.5,2,3);
+    // 目
+    ctx.fillStyle='#ffcc00'; ctx.fillRect(sx+2,sy+1+bob,3,2); ctx.fillRect(sx+e.w-5,sy+1+bob,3,2);
+    ctx.fillStyle='#000'; ctx.fillRect(sx+3,sy+1+bob,1,1); ctx.fillRect(sx+e.w-4,sy+1+bob,1,1);
+    return;
+  }
   if(!e.alive) return;
   if(e.carried) return; // 持ち上げ中はdrawPlayerで描画
   const sx=Math.round(e.x-camX+shakeX), sy=Math.round(e.y-camY+shakeY);
@@ -2678,8 +3390,9 @@ function drawBoss(){
   drawBossClaw(rage,true); ctx.restore();
 
   // ── BODY ── (HPによる色変化)
-  const bc=phase>=4?'#ff0000':phase>=3?'#ff1500':phase>=2?'#e82800':'#cc3300';
-  const bh=phase>=4?'#ff6644':phase>=3?'#ff4422':phase>=2?'#ff5522':'#ee5533';
+  const aimGlow = (b._aimWarn||0)>0 && tick%5<3; // 泡予備動作フラッシュ
+  const bc=aimGlow?'#ff6633':(phase>=4?'#ff0000':phase>=3?'#ff1500':phase>=2?'#e82800':'#cc3300');
+  const bh=aimGlow?'#ff9955':(phase>=4?'#ff6644':phase>=3?'#ff4422':phase>=2?'#ff5522':'#ee5533');
   const bd=phase>=4?'#aa0000':phase>=3?'#990000':phase>=2?'#aa1100':'#aa2200';
   // フェーズ2+ でシェル上に汗/泡ドット
   if(phase>=2 && tick%4<2){
@@ -2897,6 +3610,23 @@ function drawPhotoViewerFull(){
 }
 
 // HUD
+function drawStage2Hint(){
+  if(stage2HintT<=0) return;
+  stage2HintT--;
+  const alpha = Math.min(1, stage2HintT/30) * Math.min(1,(stage2HintT-0)/30);
+  ctx.globalAlpha = Math.max(0,Math.min(1, stage2HintT>30 ? 1 : stage2HintT/30));
+  ctx.fillStyle='rgba(0,0,0,.55)';
+  ctx.fillRect(W/2-72,H-38,144,26);
+  ctx.strokeStyle='#ffef5a'; ctx.lineWidth=1;
+  ctx.strokeRect(W/2-72,H-38,144,26);
+  ctx.fillStyle='#ffef5a'; ctx.font='bold 7px monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🪶 ジャンプ長押し → 滑空！',W/2,H-30);
+  ctx.fillStyle='#ffffff'; ctx.font='6px monospace';
+  ctx.fillText('ケープ中は空中で長押しOK',W/2,H-20);
+  ctx.globalAlpha=1; ctx.textAlign='left';
+}
+
 function drawHUD(){
   ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(0,0,W,15);
   // Hearts（最大5個）
@@ -2934,14 +3664,37 @@ function drawHUD(){
   // Progress
   ctx.fillStyle='#555'; ctx.fillRect(W-50,4,46,5);
   ctx.fillStyle='#4488ff'; ctx.fillRect(W-50,4,Math.round(46*Math.min(1,player.x/(LW*T-W))),5);
-  // ハンマー残時間バー
+  // ── ハンマー残時間バー（大型・秒数付き） ──
   if(player.hammerT>0){
-    const hw=Math.round(50*player.hammerT/400);
-    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(W/2-25,0,50,4);
+    const barW=80, barH=8;
+    const bx=W/2-barW/2, by=H-14;
+    const hw=Math.round(barW*player.hammerT/400);
     const hpulse=Math.floor(player.hammerT/6)%2;
-    ctx.fillStyle=hpulse?'#ffcc00':'#ff8800'; ctx.fillRect(W/2-25,0,hw,4);
-    ctx.fillStyle='#fff'; ctx.font='5px monospace'; ctx.textAlign='center';
-    ctx.fillText('🔨',W/2,12);
+    const isLow=player.hammerT<60;
+
+    // 背景
+    ctx.fillStyle='rgba(0,0,0,.65)';
+    ctx.fillRect(bx-2,by-2,barW+4,barH+4);
+    // バー本体
+    ctx.fillStyle=isLow?(hpulse?'#ff2200':'#ff6600'):(hpulse?'#ffee00':'#ff8800');
+    ctx.fillRect(bx,by,hw,barH);
+    // 枠線
+    ctx.strokeStyle=isLow?'#ff4444':'#ffcc00';
+    ctx.lineWidth=1; ctx.strokeRect(bx,by,barW,barH);
+
+    // 🔨ラベル＋残り秒数
+    const secLeft=Math.ceil(player.hammerT/60);
+    ctx.font='bold 7px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='rgba(0,0,0,.7)';
+    ctx.fillText(`🔨 HAMMER ${secLeft}s`,W/2+1,by+barH/2+1);
+    ctx.fillStyle=isLow?'#ff8888':'#ffee88';
+    ctx.fillText(`🔨 HAMMER ${secLeft}s`,W/2,by+barH/2);
+
+    // 残り少ないとき「まもなく終了」警告
+    if(isLow && hpulse){
+      ctx.font='6px monospace'; ctx.fillStyle='#ff4444';
+      ctx.fillText('もうすぐ終わるよ！',W/2,by-7);
+    }
   }
   // ダブルジャンプ所持アイコン
   if(player.djump){
@@ -2981,6 +3734,8 @@ function drawTitle(){
   ctx.fillText('CRAB BOSS',W/2+1,46); ctx.fillText('ADVENTURE!',W/2+1,62);
   ctx.fillStyle='#ffd700'; ctx.fillText('CRAB BOSS',W/2,45);
   ctx.fillStyle='#ff8800'; ctx.fillText('ADVENTURE!',W/2,61);
+  ctx.fillStyle='rgba(255,215,0,.7)'; ctx.font='5px monospace';
+  ctx.fillText('v1.0 COMPLETE',W/2,69);
 
   // Animated mini boss
   ctx.save(); ctx.translate(W/2,112); ctx.scale(.68,.68);
@@ -3024,40 +3779,116 @@ function drawGameOver(){
   ctx.fillStyle='rgba(0,0,0,.9)'; ctx.fillRect(0,0,W,H);
   ctx.fillStyle='#ff4444'; ctx.font='bold 20px monospace';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('GAME OVER',W/2,55);
+  ctx.fillText('GAME OVER',W/2,46);
   ctx.fillStyle='#fff'; ctx.font='8px monospace';
-  ctx.fillText(`スコア: ${player.score}`,W/2,80);
-  ctx.fillText(`コイン: ${player.coins}枚`,W/2,94);
-  drawRanking(30,102,W-60);
+  ctx.fillText(`スコア: ${player.score}`,W/2,66);
+  ctx.fillText(`コイン: ${player.coins}枚`,W/2,78);
+  // 戻り先の明示
+  if(stage2Unlocked){
+    ctx.fillStyle='#ffdd44'; ctx.font='bold 7px monospace';
+    ctx.fillText('▶ ステージ選択画面に戻ります',W/2,91);
+  } else {
+    ctx.fillStyle='#ffaa44'; ctx.font='bold 7px monospace';
+    ctx.fillText('▶ 1面からやり直します',W/2,91);
+  }
+  // テレメトリサマリ（最多死亡箇所）
+  if(telemetry.deaths.length>0){
+    const hm={};
+    telemetry.deaths.forEach(d=>{const k=`${d.stage}面 x≈${d.x}`;hm[k]=(hm[k]||0)+1;});
+    const top=Object.entries(hm).sort((a,b)=>b[1]-a[1])[0];
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(W/2-70,94,140,16);
+    ctx.fillStyle='#ffaa44'; ctx.font='6px monospace'; ctx.textAlign='center';
+    ctx.fillText(`💀最多 ${top[0]}  ${top[1]}回`,W/2,104);
+  }
+  drawRanking(30,112,W-60);
   const p=.5+Math.sin(tick*.07)*.5;
-  ctx.globalAlpha=p; ctx.fillStyle='#ffaa44'; ctx.font='7px monospace';
-  ctx.fillText('クリック / キー でもう一度！',W/2,228);
+  ctx.globalAlpha=p; ctx.fillStyle='#aaaaff'; ctx.font='7px monospace';
+  ctx.fillText('タップ / クリック でもう一度！',W/2,228);
   ctx.globalAlpha=1;
 }
 
 function drawWin(){
-  ctx.fillStyle='rgba(0,10,50,.88)'; ctx.fillRect(0,0,W,H);
-  // Firework particles (behind text)
-  for(let i=0;i<8;i++){
-    const a=i/8*Math.PI*2+tick*.025;
-    const r=50+Math.sin(tick*.05+i)*15;
-    ctx.fillStyle=['#ffd700','#ff8800','#ff44ff','#44ffff','#44ff88'][i%5];
-    ctx.globalAlpha=0.5;
-    ctx.fillRect(W/2+Math.cos(a)*r-3,H/2+Math.sin(a)*r*.4-3,6,6);
+  // ── 背景グラデーション ──
+  const grad=ctx.createLinearGradient(0,0,0,H);
+  grad.addColorStop(0,'#0a0030');
+  grad.addColorStop(0.5,'#1a0060');
+  grad.addColorStop(1,'#000820');
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+
+  // ── 花火パーティクル（自動生成） ──
+  if(tick%18===0){
+    const fx=40+Math.random()*(W-80);
+    const fy=20+Math.random()*(H*.5);
+    const cols=['#ffd700','#ff4488','#44ffff','#88ff44','#cc88ff','#ff8800'];
+    const c=cols[Math.floor(Math.random()*cols.length)];
+    for(let i=0;i<16;i++){
+      const a=i/16*Math.PI*2;
+      parts.push({x:fx+camX,y:fy+camY,vx:Math.cos(a)*3.5,vy:Math.sin(a)*3.5,
+        life:50+Math.random()*30,col:c,sz:2+Math.random()*2});
+    }
+  }
+
+  // ── 回転星リング ──
+  for(let i=0;i<12;i++){
+    const a=i/12*Math.PI*2+tick*.015;
+    const r=38+Math.sin(tick*.04+i)*6;
+    ctx.fillStyle=['#ffd700','#ff8800','#ff44ff','#44ffff','#88ff44'][i%5];
+    ctx.globalAlpha=0.55+Math.sin(tick*.1+i)*.2;
+    ctx.font='9px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('★',W/2+Math.cos(a)*r,H*.35+Math.sin(a)*r*.45);
   }
   ctx.globalAlpha=1;
-  ctx.fillStyle='#ffd700'; ctx.font='bold 16px monospace';
+
+  // ── メインパネル ──
+  ctx.fillStyle='rgba(0,0,0,.75)';
+  ctx.fillRect(12,8,W-24,H-16);
+  ctx.strokeStyle='#ffd700'; ctx.lineWidth=2; ctx.strokeRect(12,8,W-24,H-16);
+  ctx.strokeStyle='rgba(255,215,0,.35)'; ctx.lineWidth=1; ctx.strokeRect(15,11,W-30,H-22);
+
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.fillText('🎉 クリア！ 🎉',W/2,45);
-  ctx.fillStyle='#fff'; ctx.font='bold 9px monospace';
-  ctx.fillText(`スコア: ${player.score}`,W/2,68);
-  ctx.fillText(`コイン: ${player.coins}枚`,W/2,82);
-  ctx.fillStyle='#ff8800'; ctx.font='7px monospace';
-  ctx.fillText('KING CRAB を倒した！',W/2,96);
-  drawRanking(30,104,W-60);
-  const p=.5+Math.sin(tick*.08)*.5;
-  ctx.globalAlpha=p; ctx.fillStyle='#aaffaa'; ctx.font='7px monospace';
-  ctx.fillText('クリックでタイトルへ',W/2,228);
+
+  // ── CONGRATULATIONS ──
+  const pulse=.5+Math.sin(tick*.1)*.5;
+  ctx.font='bold 11px monospace';
+  ctx.fillStyle='rgba(0,0,0,.8)'; ctx.fillText('CONGRATULATIONS!',W/2+1,27+1);
+  ctx.fillStyle=`rgb(${Math.floor(255)},${Math.floor(200+pulse*55)},${Math.floor(50+pulse*50)})`;
+  ctx.fillText('CONGRATULATIONS!',W/2,27);
+
+  ctx.font='bold 8px monospace';
+  ctx.fillStyle='rgba(0,0,0,.7)'; ctx.fillText('CRAB BOSS ADVENTURE',W/2+1,39+1);
+  ctx.fillStyle='#88ffcc'; ctx.fillText('CRAB BOSS ADVENTURE',W/2,39);
+  ctx.fillStyle='#44ffaa'; ctx.fillText('COMPLETE!!',W/2,49);
+
+  // ── OMEGA CRAB KING 撃破！（4面クリア時のみ） ──
+  if(currentStage===4){
+    ctx.font='bold 8px monospace';
+    ctx.fillStyle='rgba(140,0,255,.5)'; ctx.fillRect(20,54,W-40,14);
+    ctx.fillStyle='#cc88ff';
+    ctx.fillText('⭐ OMEGA CRAB KING 撃破！ ⭐',W/2,61);
+  }
+
+  // ── スコア・タイム ──
+  const yBase=currentStage===4?74:66;
+  ctx.font='bold 9px monospace'; ctx.fillStyle='#ffd700';
+  ctx.fillText(`SCORE  ${player.score.toLocaleString()}`,W/2,yBase);
+  ctx.font='8px monospace'; ctx.fillStyle='#fff';
+  ctx.fillText(`コイン：${player.coins} 枚`,W/2,yBase+12);
+
+  if(clearTimeMs>0){
+    const sec=Math.floor(clearTimeMs/1000);
+    const ms=String(Math.floor(clearTimeMs%1000/10)).padStart(2,'0');
+    const timeStr=`${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}.${ms}`;
+    ctx.fillStyle=lastClearIsBest?'#ffee44':'#aaffaa';
+    ctx.fillText(`クリアタイム：${timeStr}${lastClearIsBest?' 🏆 NEW RECORD!':''}`,W/2,yBase+24);
+  }
+
+  // ── ランキング ──
+  drawRanking(22,yBase+34,W-44);
+
+  // ── タップ促し ──
+  const p=.4+Math.sin(tick*.09)*.6;
+  ctx.globalAlpha=p; ctx.fillStyle='#aaffaa'; ctx.font='bold 7px monospace';
+  ctx.fillText('✨ タップしてタイトルへ ✨',W/2,228);
   ctx.globalAlpha=1;
 }
 
@@ -3076,7 +3907,47 @@ function loop(){
   if(!unusedPhotoViewing && !paused) update();
 
   // ── パラックス背景（視差スクロール） ────────────────────
-  // 空グラデーション
+
+  if(currentStage===4){
+    // 4面：宇宙＋溶岩の総合背景
+    const grad=ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#0a0020');
+    grad.addColorStop(0.5,'#1a0040');
+    grad.addColorStop(1,'#3a0a10');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+    // 星（散らばり）
+    ctx.fillStyle='rgba(255,255,255,.7)';
+    for(let i=0;i<30;i++){
+      const sx=((i*137-camX*.02)%(W+20)+W+20)%(W+20)-10;
+      const sy=(i*73)%H;
+      ctx.fillRect(sx,sy,i%3===0?2:1,i%3===0?2:1);
+    }
+    // 下部溶岩光
+    ctx.fillStyle=`rgba(200,0,100,${.2+Math.sin(tick*.04)*.06})`;
+    ctx.fillRect(0,H-30,W,30);
+    ctx.fillStyle=`rgba(180,0,255,${.08+Math.sin(tick*.03)*.04})`;
+    ctx.fillRect(0,H*.6,W,H*.3);
+  } else if(currentStage===3){
+    // 3面：溶岩洞窟背景
+    const grad=ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'#1a0800');
+    grad.addColorStop(0.65,'#2d0e00');
+    grad.addColorStop(1,'#4a1800');
+    ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+    // 溶岩光ゆらめき（下部）
+    const lavaAlpha=0.28+Math.sin(tick*.04)*0.08;
+    ctx.fillStyle=`rgba(255,80,0,${lavaAlpha})`;
+    ctx.fillRect(0,H-22,W,22);
+    ctx.fillStyle=`rgba(255,120,0,${lavaAlpha*.5})`;
+    ctx.fillRect(0,H-44,W,22);
+    // 岩肌（遠景）
+    ctx.fillStyle='rgba(60,18,0,.5)';
+    for(let i=0;i<6;i++){
+      const rx=((i*113-camX*.05)%(W+80)+W+80)%(W+80)-40;
+      ctx.fillRect(rx,H*.25+Math.sin(i*.9)*18, 40+i*10, 12+i*5);
+    }
+  } else {
+  // 空グラデーション（1/2面）
   {const grd=ctx.createLinearGradient(0,0,0,H);
   grd.addColorStop(0,'#2a80ee'); grd.addColorStop(.6,'#60b0f8'); grd.addColorStop(1,'#a0d8ff');
   ctx.fillStyle=grd; ctx.fillRect(0,0,W,H);}
@@ -3120,6 +3991,7 @@ function loop(){
     ctx.fillRect(cx,cy,cw,ch); ctx.fillRect(cx+8,cy-ch*.5,cw-16,ch*.6);
     ctx.fillRect(cx+16,cy-ch,cw-32,ch*.5);
   });}
+  } // end stage1/2 parallax
 
   // World tiles
   const tx0=Math.max(0,Math.floor(camX/T)-1), tx1=Math.min(LW,tx0+22);
@@ -3184,6 +4056,7 @@ function loop(){
   drawPhotoCollection();
   if(unusedPhotoViewing) drawPhotoViewerFull();
   drawHUD();
+  if(currentStage===2) drawStage2Hint();
   drawSkyBossProjectiles();
   drawUpgradeHUD();
   if(paused) drawPauseOverlay();
@@ -3246,6 +4119,11 @@ function drawUpgradeHUD(){
   ctx.font='bold 7px monospace';
   const pow = p.cape ? '🪶 CAPE' : (p.fire ? '🔥 FIRE' : (p.big ? '⬆ BIG' : 'NORMAL'));
   ctx.fillText(pow, 7, 21);
+  if(p.cape && p.capeT>0 && p.capeT<120){
+    ctx.fillStyle = Math.floor(tick/8)%2===0 ? '#ff4444' : '#ffef5a';
+    ctx.font='bold 7px monospace';
+    ctx.fillText('MOMONGA LOW!', 54, 21);
+  }
 
   // time / best
   const nowTime = gameState==='play' ? Date.now()-gameStartTime : (clearTimeMs || bestClearTime);
@@ -3254,25 +4132,62 @@ function drawUpgradeHUD(){
   ctx.fillText('TIME '+fmtTime(nowTime), 164, 7);
   ctx.fillStyle='#9ee7ff';
   ctx.fillText('BEST '+fmtTime(bestClearTime), 164, 21);
-  ctx.textAlign='left'; ctx.fillStyle=currentStage===2?'#ffef5a':'#ffffff'; ctx.fillText(currentStage===2?'STAGE 2':'STAGE 1',70,21);
+  const stageCol=currentStage===4?'#cc88ff':currentStage===3?'#ff9944':currentStage===2?'#ffef5a':'#ffffff';
+  const stageLbl=currentStage===4?'STAGE 4':currentStage===3?'STAGE 3':currentStage===2?'STAGE 2':'STAGE 1';
+  ctx.textAlign='left'; ctx.fillStyle=stageCol; ctx.fillText(stageLbl,70,21);
   ctx.restore();
 
   // boss intro
   if(bossIntroT>0){
     bossIntroT--;
     ctx.save();
-    ctx.fillStyle='rgba(0,0,0,.65)';
-    ctx.fillRect(20,78,W-40,44);
-    ctx.strokeStyle='#ff4444';
-    ctx.strokeRect(20,78,W-40,44);
-    ctx.fillStyle='#ffdd55';
-    ctx.font='bold 15px monospace';
-    ctx.textAlign='center';
-    ctx.textBaseline='middle';
-    ctx.fillText('👑 BIG RED CRAB 👑', W/2, 96);
-    ctx.fillStyle='#fff';
-    ctx.font='8px monospace';
-    ctx.fillText('ラスボス あらわる！', W/2, 112);
+    if(currentStage===4){
+      // OMEGA CRAB KING 専用演出：全画面ブラックアウト＋でかいテキスト
+      const t=bossIntroT; // 150→0
+      const alpha=Math.min(1, t>120?0.85:(t/120)*0.85+(1-t/120)*0.4);
+      ctx.fillStyle=`rgba(0,0,0,${alpha})`;
+      ctx.fillRect(0,0,W,H);
+      // 紫のオーラ
+      const aura=Math.sin(tick*.12)*.15+.15;
+      ctx.fillStyle=`rgba(140,0,255,${aura})`;
+      ctx.fillRect(0,0,W,H);
+      // タイトル
+      const pulse=.5+Math.sin(tick*.2)*.5;
+      ctx.font='bold 17px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillStyle=`rgba(0,0,0,.8)`;
+      ctx.fillText('OMEGA CRAB KING',W/2+2,H/2-14+2);
+      ctx.fillStyle=`rgba(${Math.floor(200+pulse*55)},${Math.floor(100+pulse*50)},255,1)`;
+      ctx.fillText('OMEGA CRAB KING',W/2,H/2-14);
+      // サブタイトル
+      if(t<110){
+        ctx.font='8px monospace';
+        ctx.fillStyle='rgba(0,0,0,.7)';
+        ctx.fillText('すべての力で倒せ！',W/2+1,H/2+9+1);
+        ctx.fillStyle='#ffffaa';
+        ctx.fillText('すべての力で倒せ！',W/2,H/2+9);
+      }
+      // 星のキラキラ
+      if(tick%3===0){
+        for(let i=0;i<3;i++){
+          parts.push({x:Math.random()*W+camX,y:Math.random()*H+camY,
+            vx:(Math.random()-.5)*2,vy:(Math.random()-.5)*2,
+            life:30,col:['#cc88ff','#ff88ff','#ffffff'][i],sz:3});
+        }
+      }
+    } else {
+      // 通常ボスイントロ
+      ctx.fillStyle='rgba(0,0,0,.65)';
+      ctx.fillRect(20,78,W-40,44);
+      ctx.strokeStyle=currentStage===3?'#ff8800':'#ff4444';
+      ctx.lineWidth=2; ctx.strokeRect(20,78,W-40,44);
+      const bossName = currentStage===3?'👑 MAGMA CRAB KING 👑':'👑 SKY CRAB KING 👑';
+      const bossSubt = currentStage===3?'氷で弱体化できる！':'ボスの頭を踏め！';
+      ctx.fillStyle=currentStage===3?'#ff8800':'#ffdd55';
+      ctx.font='bold 11px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(bossName, W/2, 96);
+      ctx.fillStyle='#fff'; ctx.font='8px monospace';
+      ctx.fillText(bossSubt, W/2, 112);
+    }
     ctx.restore();
   }
 
@@ -3285,7 +4200,12 @@ function drawUpgradeHUD(){
     ctx.fillStyle='#fff';
     ctx.font='bold 7px monospace';
     ctx.textAlign='center';
-    ctx.fillText((boss.skyMode?(boss.phase2?'SKY CRAB KING!!':'SKY CRAB KING'):'KING CRAB'), W/2, by-3);
+    const bname = currentStage===4 ? (boss.phase2?'⚠OMEGA CRAB KING⚠':'OMEGA CRAB KING')
+                 : currentStage===3 ? (boss.phase2?'⚠MAGMA CRAB KING⚠':'MAGMA CRAB KING')
+                 : currentStage===2 ? (boss.phase2?'⚠SKY CRAB KING⚠':'SKY CRAB KING')
+                 : 'KING CRAB';
+    ctx.fillStyle=boss.phase2?'#ff4444':'#fff';
+    ctx.fillText(bname, W/2, by-3);
     ctx.fillStyle='#4a0000';
     ctx.fillRect(bx,by,bw,bh);
     ctx.fillStyle='#ff3333';
@@ -3295,39 +4215,113 @@ function drawUpgradeHUD(){
     ctx.restore();
   }
 
+  // ── フェーズ変化フラッシュオーバーレイ ──
+  if(phaseFlashT>0){
+    const fa=phaseFlashT/30*.55;
+    ctx.fillStyle=phaseFlashCol+fa+')';
+    ctx.fillRect(0,0,W,H);
+    phaseFlashT--;
+  }
+  // FINAL PHASE バナー
+  if(finalPhaseT>0){
+    finalPhaseT--;
+    const ft=finalPhaseT;
+    const alpha=ft>90?1:ft/90;
+    const pulse=Math.floor(ft/8)%2;
+    ctx.save();
+    ctx.globalAlpha=alpha*0.92;
+    ctx.fillStyle='rgba(0,0,0,.7)';
+    ctx.fillRect(0,H/2-22,W,42);
+    ctx.font='bold 18px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle=pulse?'#ff2222':'#ff8800';
+    ctx.fillText('⚠ FINAL PHASE! ⚠',W/2,H/2-7);
+    ctx.font='8px monospace'; ctx.fillStyle='#ffee88';
+    ctx.fillText('ラスボス 最終形態！',W/2,H/2+11);
+    ctx.globalAlpha=1; ctx.restore();
+  }
+
   if(bossDefeatT>0){
     bossDefeatT--;
     ctx.save();
-    ctx.fillStyle='rgba(255,220,80,.18)';
-    ctx.fillRect(0,0,W,H);
-    ctx.fillStyle='rgba(0,0,0,.72)';
-    ctx.fillRect(24,66,W-48,100);
-    ctx.strokeStyle='#ffd700';
-    ctx.strokeRect(24,66,W-48,100);
-    const isBest=lastClearIsBest;
-    const rankText=lastClearRankIn ? `RANK IN!  ${lastClearRank}位` : 'RANK OUT';
-    ctx.fillStyle=isBest?'#ffef5a':'#ffd700';
-    ctx.font='bold 16px monospace';
-    ctx.textAlign='center';
-    ctx.fillText(isBest?'🏆 NEW RECORD!! 🏆':'🎉 CLEAR! 🎉', W/2, 90);
-    ctx.fillStyle='#fff';
-    ctx.font='9px monospace';
-    ctx.fillText('SCORE '+String(lastClearScore||player.score), W/2, 106);
-    ctx.fillText('TIME  '+fmtTime(clearTimeMs), W/2, 119);
-    ctx.fillStyle=isBest?'#ffef5a':'#9ee7ff';
-    ctx.fillText('BEST  '+fmtTime(bestClearTime), W/2, 132);
-    ctx.fillStyle=lastClearRankIn?'#ffdd55':'#cccccc';
-    ctx.font='bold 9px monospace';
-    ctx.fillText(rankText, W/2, 145);
-    ctx.fillStyle='#9ee7ff';
-    ctx.font='7px monospace';
-    ctx.fillText('更新できたか一目でわかるようにしました', W/2, 157);
+
+    if(currentStage===1){
+      // ══ 1面クリア演出 ══
+      // 紙吹雪パーティクル（tickに乗せてランダム）
+      if(bossDefeatT>60 && tick%3===0){
+        const cx=Math.random()*W, col=['#ffef5a','#ff8800','#ff4488','#44ffaa','#44aaff'][Math.floor(Math.random()*5)];
+        parts.push({x:cx,y:0,vx:(Math.random()-.5)*1.4,vy:1.2+Math.random()*.8,life:140,sz:3,col});
+      }
+      // 黄金フラッシュ背景
+      const flashA=Math.max(0,Math.sin(bossDefeatT*.06)*.22);
+      ctx.fillStyle=`rgba(255,220,80,${flashA})`;
+      ctx.fillRect(0,0,W,H);
+
+      // タイトルバナー（中央にスライドイン）
+      const slideIn=Math.max(0,Math.min(1,(180-bossDefeatT)/20));
+      const bannerY=H/2-44+((1-slideIn)*(-80));
+      ctx.fillStyle='rgba(0,0,0,.85)';
+      ctx.fillRect(16,bannerY,W-32,56);
+      ctx.strokeStyle='#ffef5a'; ctx.lineWidth=2;
+      ctx.strokeRect(16,bannerY,W-32,56);
+      // キラキラ角飾り
+      ctx.fillStyle='#ffd700';
+      [[16,bannerY],[W-16,bannerY],[16,bannerY+56],[W-16,bannerY+56]].forEach(([cx,cy])=>{
+        ctx.fillRect(cx-3,cy-3,6,6);
+      });
+      ctx.fillStyle='#ffef5a'; ctx.font='bold 18px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('STAGE '+currentStage, W/2, bannerY+18);
+      ctx.fillStyle='#ffffff'; ctx.font='bold 14px monospace';
+      ctx.fillText('C L E A R ! !', W/2, bannerY+36);
+
+      // カウントダウンメッセージ（60フレーム以降）
+      if(bossDefeatT<90){
+        ctx.fillStyle='rgba(0,0,0,.7)';
+        ctx.fillRect(W/2-64,bannerY+62,128,20);
+        ctx.fillStyle='#aaffaa'; ctx.font='7px monospace';
+        const nextStageTxt = currentStage===1 ? '▶▶ 2面へ進む…' : '▶▶ 3面へ進む…';
+        ctx.fillText(nextStageTxt, W/2, bannerY+72);
+      }
+    } else {
+      // ══ 2面（最終）クリア演出 ══
+      ctx.fillStyle='rgba(255,220,80,.18)';
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle='rgba(0,0,0,.82)';
+      ctx.fillRect(20,54,W-40,130);
+      ctx.strokeStyle='#ffd700'; ctx.lineWidth=2;
+      ctx.strokeRect(20,54,W-40,130);
+      // 虹色タイトル
+      ['#ffef5a','#ff8844','#ff44aa','#44aaff','#44ffaa'].forEach((col,i)=>{
+        const off=Math.sin(tick*.08+i*.8)*1.5;
+        ctx.fillStyle=col; ctx.font='bold 8px monospace';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('★'.repeat(i%2===0?3:2), W/2-50+i*25, 68+off);
+      });
+      const isBest=lastClearIsBest;
+      ctx.fillStyle=isBest?'#ffef5a':'#ffd700';
+      ctx.font='bold 16px monospace';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(isBest?'🏆 NEW RECORD!!':'🎉 GAME CLEAR!!', W/2, 88);
+      ctx.fillStyle='#fff'; ctx.font='9px monospace';
+      ctx.fillText('SCORE  ' + String(lastClearScore||player.score), W/2, 108);
+      ctx.fillText('TIME   ' + fmtTime(clearTimeMs), W/2, 121);
+      ctx.fillStyle=isBest?'#ffef5a':'#9ee7ff';
+      ctx.fillText('BEST   ' + fmtTime(bestClearTime), W/2, 134);
+      const rankText=lastClearRankIn ? `🏅 RANK ${lastClearRank}位 入り！` : 'RANK OUT';
+      ctx.fillStyle=lastClearRankIn?'#ffdd55':'#aaaaaa';
+      ctx.font='bold 8px monospace';
+      ctx.fillText(rankText, W/2, 150);
+      // 点滅プロンプト
+      if(tick%50<30){
+        ctx.fillStyle='#aaffaa'; ctx.font='7px monospace';
+        ctx.fillText('タップでステージ選択へ', W/2, 170);
+      }
+    }
     ctx.restore();
   }
 }
 
 
-// ── PAUSE BUTTON ──────────────────────────────────────────────────
 // ── PAUSE BUTTON ──────────────────────────────────────────────────
 (function(){
   const btn = document.getElementById('pauseBtn');
@@ -3355,6 +4349,27 @@ function drawSkyBossProjectiles(){
       ctx.fill(); ctx.stroke();
       ctx.fillStyle='rgba(255,255,255,.75)';
       ctx.fillRect(x+2,y+2,2,2);
+      ctx.restore();
+    }else if(pr.kind==='geyser'){
+      ctx.save();
+      const gf=tick%4<2?'#ff6600':'#ff3300';
+      ctx.fillStyle=gf; ctx.fillRect(x,y,pr.w,pr.h);
+      ctx.fillStyle='#ffcc00'; ctx.fillRect(x+2,y+2,pr.w-4,3);
+      ctx.fillStyle=`rgba(255,150,0,.6)`;
+      ctx.fillRect(x-3,y+4,pr.w+6,4); // 横広がり
+      ctx.restore();
+    }else if(pr.kind==='fire'){
+      ctx.save();
+      // 火炎弾：赤橙のぼやけた火の玉
+      const fc=tick%6<3?'#ff4400':'#ff8800';
+      ctx.fillStyle=fc;
+      ctx.fillRect(x+1,y+1,pr.w-2,pr.h-2);
+      ctx.fillStyle='#ffcc00';
+      ctx.fillRect(x+3,y+2,pr.w-6,3);
+      // 尾
+      ctx.fillStyle='rgba(255,100,0,.5)';
+      const trail=pr.vx>0?-1:1;
+      ctx.fillRect(x+trail*4,y+2,4,pr.h-4);
       ctx.restore();
     }else if(pr.kind==='shockwave'){
       ctx.save();
