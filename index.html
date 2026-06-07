@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE UX Fixed</title>
+<title>CRAB BOSS ADVENTURE v1.0 COMPLETE</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -1179,6 +1179,11 @@ function killBoss(pts){
   p.score+=pts; shakeX=12; shakeY=12;
 }
 
+function calcRank(){
+  const rs = player.score + player.coins*200
+    + (clearTimeMs>0 ? Math.max(0, 60000-clearTimeMs) : 0);
+  return rs>=80000?'S':rs>=55000?'A':rs>=35000?'B':rs>=15000?'C':'D';
+}
 function submitScore(){
   if(scoreSubmitted) return; 
   scoreSubmitted=true;
@@ -1630,6 +1635,59 @@ function setupVirtualStick(){
 
 setupStartOverlay();
 setupStageSelect();
+
+// ── 裏技：タイトル右上を5回タップで全ステージ解放 ──
+(()=>{
+  let tapCount=0, tapTimer=0;
+  canvas.addEventListener('click', e=>{
+    if(gameState!=='title') return;
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left)/rect.width*W;
+    const y=(e.clientY-rect.top)/rect.height*H;
+    if(x>W*.7 && y<H*.2){
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer=setTimeout(()=>tapCount=0, 1500);
+      if(tapCount>=5){
+        tapCount=0;
+        stage2Unlocked=stage3Unlocked=stage4Unlocked=true;
+        localStorage.setItem('crabStage2Unlocked','1');
+        localStorage.setItem('crabStage3Unlocked','1');
+        localStorage.setItem('crabStage4Unlocked','1');
+        tone(440,.06,'square',.2); tone(550,.06,'square',.18,.06);
+        tone(660,.06,'square',.16,.12); tone(880,.1,'square',.14,.18);
+        parts.push({x:W/2+camX,y:H/4+camY,vx:0,vy:-3,life:60,col:'#ffd700',sz:12});
+        for(let i=0;i<20;i++){
+          const a=i/20*Math.PI*2;
+          parts.push({x:W*.85+camX,y:H*.1+camY,vx:Math.cos(a)*3,vy:Math.sin(a)*3,
+            life:50,col:['#ffd700','#ff88ff','#44ffff','#88ff44'][i%4],sz:3});
+        }
+        spawnFloat(W/2+camX,H/2+camY,'🔓 ALL STAGES UNLOCKED! 🔓','#ffd700');
+      }
+    }
+  });
+  canvas.addEventListener('touchstart', e=>{
+    if(gameState!=='title') return;
+    const rect=canvas.getBoundingClientRect();
+    const t=e.touches[0];
+    const x=(t.clientX-rect.left)/rect.width*W;
+    const y=(t.clientY-rect.top)/rect.height*H;
+    if(x>W*.7 && y<H*.2){
+      tapCount++;
+      clearTimeout(tapTimer);
+      tapTimer=setTimeout(()=>tapCount=0, 1500);
+      if(tapCount>=5){
+        tapCount=0;
+        stage2Unlocked=stage3Unlocked=stage4Unlocked=true;
+        localStorage.setItem('crabStage2Unlocked','1');
+        localStorage.setItem('crabStage3Unlocked','1');
+        localStorage.setItem('crabStage4Unlocked','1');
+        tone(440,.06,'square',.2); tone(880,.1,'square',.14,.18);
+        spawnFloat(W/2+camX,H/2+camY,'🔓 ALL STAGES UNLOCKED! 🔓','#ffd700');
+      }
+    }
+  },{passive:true});
+})();
 setupVirtualStick();
 bindTouchButton('jumpBtn','Space');
 bindTouchButton('fireBtn','KeyZ');
@@ -3736,6 +3794,9 @@ function drawTitle(){
   ctx.fillStyle='#ff8800'; ctx.fillText('ADVENTURE!',W/2,61);
   ctx.fillStyle='rgba(255,215,0,.7)'; ctx.font='5px monospace';
   ctx.fillText('v1.0 COMPLETE',W/2,69);
+  // 右上にごく薄い「？」（裏技ヒント）
+  ctx.fillStyle='rgba(255,255,255,.12)'; ctx.font='7px monospace'; ctx.textAlign='right';
+  ctx.fillText('？',W-4,10); ctx.textAlign='center';
 
   // Animated mini boss
   ctx.save(); ctx.translate(W/2,112); ctx.scale(.68,.68);
@@ -3867,6 +3928,16 @@ function drawWin(){
     ctx.fillText('⭐ OMEGA CRAB KING 撃破！ ⭐',W/2,61);
   }
 
+  // ── RANK計算 ──
+  const rankScore = player.score
+    + player.coins * 200
+    + (clearTimeMs>0 ? Math.max(0, 60000 - clearTimeMs) : 0);
+  const rank = rankScore >= 80000 ? 'S'
+             : rankScore >= 55000 ? 'A'
+             : rankScore >= 35000 ? 'B'
+             : rankScore >= 15000 ? 'C' : 'D';
+  const rankCol = rank==='S'?'#ffd700':rank==='A'?'#ff8800':rank==='B'?'#88ff44':rank==='C'?'#88aaff':'#aaaaaa';
+
   // ── スコア・タイム ──
   const yBase=currentStage===4?74:66;
   ctx.font='bold 9px monospace'; ctx.fillStyle='#ffd700';
@@ -3882,8 +3953,32 @@ function drawWin(){
     ctx.fillText(`クリアタイム：${timeStr}${lastClearIsBest?' 🏆 NEW RECORD!':''}`,W/2,yBase+24);
   }
 
+  // ── RANK表示 ──
+  const rx=W/2+55, ry=yBase+4;
+  ctx.font='bold 22px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(0,0,0,.7)'; ctx.fillRect(rx-16,ry-14,32,30);
+  ctx.strokeStyle=rankCol; ctx.lineWidth=1.5; ctx.strokeRect(rx-16,ry-14,32,30);
+  ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillText(rank,rx+1,ry+1);
+  ctx.fillStyle=rankCol; ctx.fillText(rank,rx,ry);
+  ctx.font='5px monospace'; ctx.fillStyle='rgba(255,255,255,.7)';
+  ctx.fillText('RANK',rx,ry+14);
+
   // ── ランキング ──
   drawRanking(22,yBase+34,W-44);
+
+  // ── THANK YOU ──
+  ctx.font='bold 8px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(20,196,W-40,18);
+  ctx.fillStyle='#ffcc88';
+  ctx.fillText('THANK YOU FOR PLAYING!',W/2,205);
+  // ランクの再表示（小さく下に）
+  const rs2=player.score+player.coins*200+(clearTimeMs>0?Math.max(0,60000-clearTimeMs):0);
+  const rk2=rs2>=80000?'S':rs2>=55000?'A':rs2>=35000?'B':rs2>=15000?'C':'D';
+  const rc2=rk2==='S'?'#ffd700':rk2==='A'?'#ff8800':rk2==='B'?'#88ff44':rk2==='C'?'#88aaff':'#aaaaaa';
+  ctx.font='7px monospace'; ctx.fillStyle='#ccc';
+  ctx.fillText(`CLEAR RANK：`,W/2-14,216);
+  ctx.font='bold 9px monospace'; ctx.fillStyle=rc2;
+  ctx.fillText(rk2,W/2+28,216);
 
   // ── タップ促し ──
   const p=.4+Math.sin(tick*.09)*.6;
