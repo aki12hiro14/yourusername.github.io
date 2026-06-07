@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Tap Start</title>
+<title>CRAB BOSS ADVENTURE Sky Boss</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -295,6 +295,49 @@ canvas {
   margin-top: 6px;
 }
 
+
+#stageSelectOverlay {
+  position:fixed;
+  inset:0;
+  z-index:32;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  background:rgba(0,0,0,.70);
+  color:#fff;
+  font-family:system-ui, sans-serif;
+  text-align:center;
+  pointer-events:auto;
+}
+#stageSelectInner {
+  border:2px solid rgba(255,255,255,.85);
+  border-radius:18px;
+  padding:22px 24px;
+  background:rgba(0,0,0,.78);
+  box-shadow:0 0 30px rgba(255,255,255,.18);
+  max-width:92vw;
+}
+.stageBtn {
+  display:block;
+  width:min(280px,80vw);
+  margin:12px auto;
+  padding:14px 16px;
+  border-radius:14px;
+  border:2px solid rgba(255,255,255,.82);
+  background:rgba(255,255,255,.12);
+  color:#fff;
+  font-size:18px;
+  font-weight:900;
+}
+.stageBtn.stage2 {
+  background:rgba(255,215,0,.20);
+  color:#ffef5a;
+  box-shadow:0 0 18px rgba(255,215,0,.28);
+}
+.stageBtn.locked {
+  opacity:.45;
+}
+
 </style>
 </head>
 <body>
@@ -306,9 +349,20 @@ canvas {
     <div id="tapStart">▶ ここをタップしてスタート</div>
     <p>画面中央をタップすると始まります</p>
     <p>🕹️ MOVE　JUMP　🔥くるくる　❄️こおり</p>
-    <p>🪶 モモンガ：JUMP長押しで滑空</p>
+    <p>🪶 モモンガ：JUMP長押しで滑空</p><p>1面クリア後に2面へ進みます</p>
   </div>
 </div>
+
+<div id="stageSelectOverlay">
+  <div id="stageSelectInner">
+    <h1>🦀 STAGE SELECT</h1>
+    <p>1面クリア後は2面から遊べます</p>
+    <button id="stage1Btn" class="stageBtn">▶ 1面から遊ぶ</button>
+    <button id="stage2Btn" class="stageBtn stage2">🪶 2面から遊ぶ</button>
+    <p style="font-size:12px;opacity:.8;">ハートが全部なくなったら1面からやり直し</p>
+  </div>
+</div>
+
 <div id="touchControls" aria-label="スマホ操作ボタン">
   <div id="stickArea" aria-label="移動スティック">
     <div id="stickHint">MOVE</div>
@@ -386,6 +440,9 @@ const sndBreak   = ()=>{ tone(180,.07,'sawtooth',.2); tone(120,.1,'sawtooth',.18
 const sndItem    = ()=>{ [523,659,784,1047].forEach((f,i)=>tone(f,.08,'square',.22,i*.08)); };
 const sndHurt    = ()=>{ tone(220,.15,'sawtooth',.3); tone(180,.15,'sawtooth',.25,.1); };
 const sndBossHit = ()=>{ tone(150,.2,'sawtooth',.35); tone(100,.2,'sawtooth',.3,.15); };
+const sndBubble = ()=>{ tone(900,.04,'sine',.10); tone(1200,.05,'sine',.08,.04); };
+const sndShockWave = ()=>{ tone(90,.18,'sawtooth',.24); tone(55,.22,'sawtooth',.20,.08); };
+
 const sndDie     = ()=>{ [440,330,220,110].forEach((f,i)=>tone(f,.1,'square',.25,i*.1)); };
 const sndWin     = ()=>{ [523,659,784,523,659,784,1047].forEach((f,i)=>tone(f,.12,'square',.28,i*.12)); };
 const sndQBlk      = ()=>{ tone(660,.06,'square',.18); tone(880,.08,'square',.18,.06); };
@@ -446,6 +503,7 @@ function fmtTime(ms){
 function saveProgress(){
   if(!player || gameState!=='play') return;
   const data={
+    stage:currentStage,
     x:player.x, y:player.y, hp:player.hp, big:player.big, fire:player.fire,
     coins:player.coins, score:player.score, iceReady:player.iceReady, cape:player.cape, capeT:player.capeT,
     t:Date.now()
@@ -465,6 +523,7 @@ function loadProgressIntoPlayer(){
   player.iceReady=data.iceReady||0;
   player.cape=!!data.cape;
   player.capeT=data.capeT||0;
+  if(data.stage===2){ player.cape=true; player.capeT=Math.max(player.capeT||0,900); }
 }
 function clearSavedProgress(){
   localStorage.removeItem('crabSave');
@@ -493,6 +552,10 @@ function startGameFromUserAction(){
   initAudio();
   startBGM();
   hideStartOverlay();
+  if(gameState==='title' && stage2Unlocked){
+    showStageSelect();
+    return;
+  }
   if(gameState==='title' || gameState==='gameover'){
     resetGame();
     gameState='play';
@@ -512,6 +575,58 @@ function setupStartOverlay(){
   el.addEventListener('click',start);
 }
 
+
+function showStageSelect(){
+  const el=document.getElementById('stageSelectOverlay');
+  const b2=document.getElementById('stage2Btn');
+  if(!el) return;
+  stageSelectMode=true;
+  el.style.display='flex';
+  if(b2){
+    if(stage2Unlocked){
+      b2.classList.remove('locked');
+      b2.textContent='🪶 2面から遊ぶ';
+      b2.disabled=false;
+    }else{
+      b2.classList.add('locked');
+      b2.textContent='🔒 2面は1面クリア後';
+      b2.disabled=true;
+    }
+  }
+}
+function hideStageSelect(){
+  const el=document.getElementById('stageSelectOverlay');
+  if(el) el.style.display='none';
+  stageSelectMode=false;
+}
+function startFromStage(stageNo){
+  initAudio();
+  startBGM();
+  hideStartOverlay();
+  hideStageSelect();
+  resetGame();
+  if(stageNo===2){
+    if(!stage2Unlocked) return;
+    if(typeof startStage2 === 'function'){
+      stage2Unlocked=true; localStorage.setItem('crabStage2Unlocked','1');
+      gameState='title'; showStageSelect();
+    } else {
+      // フォールバック：2面開始地点へ直接移動
+      player.x=48;
+      player.y=0;
+    }
+  }
+  gameState='play';
+}
+function setupStageSelect(){
+  const b1=document.getElementById('stage1Btn');
+  const b2=document.getElementById('stage2Btn');
+  if(b1) b1.addEventListener('click',e=>{e.preventDefault(); startFromStage(1);});
+  if(b2) b2.addEventListener('click',e=>{e.preventDefault(); if(stage2Unlocked) startFromStage(2);});
+  if(b1) b1.addEventListener('touchstart',e=>{e.preventDefault(); startFromStage(1);},{passive:false});
+  if(b2) b2.addEventListener('touchstart',e=>{e.preventDefault(); if(stage2Unlocked) startFromStage(2);},{passive:false});
+}
+
 // ── TILE GRID ──────────────────────────────────────
 let tiles = [];
 function getTile(x,y){ if(x<0||x>=LW||y<0||y>=LH) return SOLID; return tiles[y*LW+x]; }
@@ -521,7 +636,7 @@ function isSolid(id){ return id===SOLID||id===BRICK||id===QBLK||id===PTOP||id===
 function fillRect(x,y,w,h,id){ for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) setTile(x+dx,y+dy,id); }
 function fillRow(y,x0,x1,id){ for(let x=x0;x<x1;x++) setTile(x,y,id); }
 
-function buildLevel(){
+function buildLevelStage1(){
   tiles = new Uint8Array(LW*LH);
   // Ground
   fillRect(0,GR,LW,LH-GR,SOLID);
@@ -615,6 +730,71 @@ function buildLevel(){
   fillRow(GR-5,186,191,SOLID);
 }
 
+
+
+// ── LEVEL DISPATCHER ──────────────────────────────
+function buildLevel(){
+  if(currentStage===2) buildLevelStage2();
+  else buildLevelStage1();
+}
+
+// Stage 2: 1面を完全に残した上で、別ステージとして新規構築
+function buildLevelStage2(){
+  tiles = new Uint8Array(LW*LH);
+
+  // ─ Stage2 Opening: モモンガ練習場 ─
+  fillRect(0,GR,26,LH-GR,SOLID);
+  setTile(5,GR-4,QBLK);    // cape
+  setTile(10,GR-4,QBLK);   // coin
+  setTile(17,GR-1,SPRING);
+  for(let x=3;x<22;x+=2) setTile(x,GR-3,COIN);
+
+  // ─ First sky gap: 短い滑空 ─
+  fillRect(26,GR,22,LH-GR,AIR);
+  fillRow(GR-4,30,36,SOLID);
+  fillRow(GR-6,40,46,SOLID);
+  setTile(42,GR-7,QBLK);   // cape refill
+  for(let x=30;x<47;x+=2) setTile(x,GR-5,COIN);
+
+  // ─ Safe rest island ─
+  fillRect(49,GR,18,LH-GR,SOLID);
+  setTile(55,GR-4,QBLK);   // hammer
+  for(let x=50;x<66;x+=2) setTile(x,GR-2,COIN);
+
+  // ─ Moving-cloud training ─
+  fillRect(67,GR,34,LH-GR,AIR);
+  fillRow(GR-5,70,76,SOLID);
+  fillRow(GR-7,82,88,SOLID);
+  fillRow(GR-4,94,100,SOLID);
+  setTile(84,GR-8,QBLK);   // ice
+  setTile(96,GR-5,QBLK);   // cape
+  for(let x=70;x<100;x+=3) setTile(x,GR-6 + (x%3),COIN);
+
+  // ─ Checkpoint island ─
+  fillRect(104,GR,18,LH-GR,SOLID);
+  setTile(108,GR-4,QBLK);  // cape
+  setTile(113,GR-4,QBLK);  // magnet
+  for(let x=105;x<121;x+=2) setTile(x,GR-2,COIN);
+
+  // ─ Big glide road: モモンガ本番 ─
+  fillRect(122,GR,35,LH-GR,AIR);
+  setTile(124,GR-1,SPRING);
+  fillRow(GR-8,130,136,SOLID);
+  fillRow(GR-6,142,148,SOLID);
+  fillRow(GR-4,152,157,SOLID);
+  setTile(132,GR-9,QBLK);  // cape
+  for(let x=127;x<157;x+=2) setTile(x,GR-9 + (Math.floor(x/2)%3),COIN);
+
+  // ─ Final Boss Arena ─
+  fillRect(157,GR,LW-157,LH-GR,BFLOOR);
+  fillRow(GR-8,159,216,SOLID);
+  for(let gx=164;gx<216;gx+=7) setTile(gx,GR-8,AIR);
+  fillRow(GR-5,162,167,SOLID);
+  fillRow(GR-5,174,179,SOLID);
+  fillRow(GR-6,186,191,SOLID);
+  fillRow(GR-4,198,203,SOLID);
+}
+
 // ── RANKING ───────────────────────────────────────
 const RANK_KEY='crabRankings';
 function loadRankings(){ return JSON.parse(localStorage.getItem(RANK_KEY)||'[]'); }
@@ -688,6 +868,10 @@ let player, enemies, items, projs, parts, coinsDone, brokenQ, floatTxts, firebal
 let boss, camX, camY, tick, gameState;
 let shakeX=0, shakeY=0, bossWarn=0;
 let checkpointX=0, checkpointActivated=false, checkpointBig=false, checkpointFire=false;
+let currentStage=1;
+let stage2Unlocked=localStorage.getItem('crabStage2Unlocked')==='1';
+let stageSelectMode=false;
+let stageTransitionT=0;
 
 let gameStartTime=0, clearTimeMs=0;
 let bestClearTime=Number(localStorage.getItem('crabBestClearTime')||0);
@@ -706,6 +890,7 @@ let lastClearScore=0;
 const unusedPhotoCollection=[]; let unusedPhotoOverlay=null; let unusedPhotoViewing=null;
 
 function resetGame(){
+  currentStage=(savedProgress && savedProgress.stage) ? savedProgress.stage : 1;
   buildLevel();
 
   player = {
@@ -733,6 +918,17 @@ function resetGame(){
     {x:135,y:GR-1,vx:-.8}, // section5
     {x:150,y:GR-1,vx:-.8}, // section5 boss前
   ].map(e=>({...e,x:e.x*T,y:e.y*T,vy:0,w:14,h:12,alive:true,stomp:0,animT:0}));
+  if(currentStage===2){
+    enemies = [
+      {x:32,y:GR-5,vx:.8},
+      {x:44,y:GR-7,vx:-.8},
+      {x:72,y:GR-6,vx:.8},
+      {x:86,y:GR-8,vx:-.8},
+      {x:110,y:GR-1,vx:.8},
+      {x:134,y:GR-9,vx:.8},
+      {x:146,y:GR-7,vx:-.8},
+    ].map(e=>({...e,x:e.x*T,y:e.y*T,vy:0,w:14,h:12,alive:true,stomp:0,animT:0}));
+  }
 
   boss = {
     x:170*T, y:(GR-4)*T, w:56, h:40,
@@ -749,6 +945,14 @@ function resetGame(){
     {x:191*T,y:(GR-3)*T,w:3*T,h:T,vx:0,vy:.85,x0:191*T,y0:(GR-3)*T,range:2*T},
     {x:205*T,y:(GR-5)*T,w:3*T,h:T,vx:0,vy:-.85,x0:205*T,y0:(GR-5)*T,range:2*T},
   ];
+  if(currentStage===2){
+    movPlats=[
+      {x:71*T,y:(GR-4)*T,w:3*T,h:T,vx:1.2,vy:0,x0:71*T,y0:(GR-4)*T,range:5*T},
+      {x:86*T,y:(GR-6)*T,w:3*T,h:T,vx:-1.1,vy:0,x0:86*T,y0:(GR-6)*T,range:5*T},
+      {x:176*T,y:(GR-5)*T,w:3*T,h:T,vx:1.3,vy:0,x0:176*T,y0:(GR-5)*T,range:5*T},
+      {x:198*T,y:(GR-5)*T,w:3*T,h:T,vx:0,vy:.85,x0:198*T,y0:(GR-5)*T,range:2*T},
+    ];
+  }
   coinsDone={}; brokenQ={}; scoreSubmitted=false;
   pipeTimers=PIPE_DEFS.map(()=>300+Math.floor(Math.random()*400));
   pipeWarn=PIPE_DEFS.map(()=>0);
@@ -759,10 +963,39 @@ function resetGame(){
   if(savedProgress){ loadProgressIntoPlayer(); savedProgress=null; }
 }
 
+
+function startStage2FromStage1(){
+  const carryScore=player.score;
+  const carryCoins=player.coins;
+  const carryHp=Math.max(3,player.hp);
+  savedProgress={
+    stage:2,
+    x:48,
+    y:0,
+    hp:carryHp,
+    big:false,
+    fire:false,
+    coins:carryCoins,
+    score:carryScore,
+    iceReady:0,
+    cape:true,
+    capeT:900
+  };
+  resetGame();
+  gameState='play';
+  startBGM();
+  bossWarn=0;
+  bossDefeatT=0;
+  stageTransitionT=160;
+  spawnFloat(player.x+player.w/2,player.y+10,'STAGE 2: モモンガ・スカイロード','#ffef5a');
+  tone(660,.08,'square',.18); tone(880,.08,'square',.16,.08); tone(1320,.16,'square',.14,.16);
+}
+
 // ── INPUT ──────────────────────────────────────────
 const keys={};
 let stickPowerX=0;
 document.addEventListener('keydown',e=>{
+  if(stageSelectMode) return;
   startGameFromUserAction(); keys[e.code]=true;
   if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
   // フルスクリーン閲覧中はどのキーでも閉じる
@@ -787,6 +1020,7 @@ function bindTouchButton(id, code){
   if(!btn) return;
   const on=e=>{
     e.preventDefault();
+    if(stageSelectMode) return;
     startGameFromUserAction();
     keys[code]=true;
     if(gameState==='title'||gameState==='gameover'){
@@ -823,6 +1057,7 @@ function setupVirtualStick(){
   };
 
   const moveStick=(clientX,clientY)=>{
+    if(stageSelectMode) return;
     startGameFromUserAction();
     if(gameState==='title'||gameState==='gameover'){
       resetGame(); gameState='play';
@@ -889,6 +1124,7 @@ function setupVirtualStick(){
 }
 
 setupStartOverlay();
+setupStageSelect();
 setupVirtualStick();
 bindTouchButton('jumpBtn','Space');
 bindTouchButton('fireBtn','KeyZ');
@@ -1056,6 +1292,38 @@ function findSafeRespawnX(nearX){
   return 48; // 最終フォールバック
 }
 
+
+function startStage2(){
+  // 2面から開始する時の初期化。1面は壊さず、2面用の初期位置へ移動。
+  if(typeof buildStage2 === 'function'){
+    buildStage2();
+    if(typeof currentStage !== 'undefined') currentStage=2;
+    player.x=48; player.y=0;
+  } else {
+    // true_stage2版ではこの関数が無い場合もあるため、既存の2面開始座標へフォールバック
+    if(typeof currentStage !== 'undefined') currentStage=2;
+    player.x=48; player.y=0;
+  }
+  player.vx=0; player.vy=0;
+  player.hp=3;
+  player.cape=true; player.capeT=900;
+  // SKY CRAB KING setup：2面ボスは強化版
+  if(typeof boss !== 'undefined' && boss){
+    boss.hp=8; boss.maxHp=8;
+    boss.bubbleT=100;
+    boss.skyMode=true;
+    boss.shockT=0;
+    boss.phase2=false;
+    boss.name='SKY CRAB KING';
+  }
+  player.big=false; player.fire=false;
+  player.invT=80;
+  camX=0; camY=0;
+  gameStartTime=Date.now();
+  clearTimeMs=0;
+  spawnFloat(player.x+player.w/2,player.y+20,'STAGE 2 START!','#ffef5a');
+}
+
 // ── UPDATE ─────────────────────────────────────────
 function update(){
   tick++;
@@ -1066,6 +1334,18 @@ function update(){
 
   const p=player;
 
+  // Stage 2 checkpoint：2面だけの中間地点。1面の内容には触れない。
+  if(currentStage===2 && !checkpointActivated && p.x>104*T){
+    checkpointActivated=true;
+    checkpointX=106*T;
+    checkpointBig=p.big;
+    checkpointFire=p.fire;
+    p.cape=true; p.capeT=900;
+    spawnFloat(p.x+p.w/2,p.y-18,'CHECK POINT! モモンガ補充','#00ff88');
+    addParts(p.x+p.w/2,p.y+p.h/2,'#00ff88',20);
+    tone(523,.08,'square',.18); tone(659,.08,'square',.16,.08); tone(784,.16,'square',.14,.16);
+  }
+
   // Dead player arc
   if(p.dead){
     p.vy+=GRAVITY; p.y+=p.vy; p.deadT--;
@@ -1075,7 +1355,8 @@ function update(){
       if(checkpointActivated){
         p.x=checkpointX; p.y=(GR-2)*T;
         p.big=checkpointBig; p.fire=checkpointFire;
-        spawnFloat(p.x,p.y-10,'復活!','#00ff88');
+        if(currentStage===2){ p.cape=true; p.capeT=900; }
+        spawnFloat(p.x,p.y-10,currentStage===2?'復活! モモンガON':'復活!','#00ff88');
       } else {
         p.x=findSafeRespawnX(Math.max(16,camX+32));
         p.y=(GR-2)*T;
@@ -1634,7 +1915,7 @@ function update(){
   for(let i=projs.length-1;i>=0;i--){
     const pr=projs[i];
     pr.x+=pr.vx; pr.y+=pr.vy; pr.vy+=GRAVITY*.3; pr.life--;
-    if(pr.life<=0||isSolid(getTile(Math.floor(pr.x/T),Math.floor(pr.y/T)))){
+    if(pr.life<=0||((pr.kind!=='shockwave')&&isSolid(getTile(Math.floor(pr.x/T),Math.floor(pr.y/T))))){
       addParts(pr.x,pr.y,'#ff6600',5); projs.splice(i,1); continue;
     }
     if(p.invT===0 && overlap(p.x,p.y,p.w,p.h,pr.x,pr.y,pr.w,pr.h)){
@@ -1653,12 +1934,25 @@ function update(){
     if(floatTxts[i].life<=0) floatTxts.splice(i,1);
   }
 
-  // Win condition：ボス撃破後3秒で自動的にクリア（歩く必要なし）
+  // Stage clear / Final clear：1面ボス撃破後は2面へ、2面ボス撃破後だけ最終クリア
   if(!boss.alive){
     bossWarn=0;
     boss._deadTimer=(boss._deadTimer||0)+1;
-    if(boss._deadTimer===1){ sndWin(); stopBGM(); bossDefeatT=180; clearTimeMs=Date.now()-gameStartTime; lastClearIsBest=(!bestClearTime || clearTimeMs<bestClearTime); if(lastClearIsBest){ bestClearTime=clearTimeMs; localStorage.setItem('crabBestClearTime',String(bestClearTime)); } clearSavedProgress(); }
-    if(boss._deadTimer>180){ submitScore(); gameState='win'; bossDefeatT=999999; }
+    if(boss._deadTimer===1){
+      sndWin(); stopBGM(); bossDefeatT=180;
+      if(currentStage===1){
+        spawnFloat(boss.x+boss.w/2,boss.y-20,'STAGE 1 CLEAR!','#ffef5a');
+      } else {
+        clearTimeMs=Date.now()-gameStartTime;
+        lastClearIsBest=(!bestClearTime || clearTimeMs<bestClearTime);
+        if(lastClearIsBest){ bestClearTime=clearTimeMs; localStorage.setItem('crabBestClearTime',String(bestClearTime)); }
+        clearSavedProgress();
+      }
+    }
+    if(boss._deadTimer>180){
+      if(currentStage===1){ startStage2FromStage1(); return; }
+      submitScore(); gameState='win'; bossDefeatT=999999;
+    }
   }
 
   updateCamera();
@@ -1666,9 +1960,46 @@ function update(){
 
 function updateBoss(){
   const b=boss;
+
+  // SKY CRAB KING phase control：2面のみ強化
+  const isSkyBoss = (typeof currentStage !== 'undefined' && currentStage===2) || b.skyMode;
+  if(isSkyBoss && !b._skyInit){
+    b._skyInit=true;
+    b.skyMode=true;
+    b.hp=Math.max(b.hp||0,8);
+    b.maxHp=Math.max(b.maxHp||0,8);
+    b.bubbleT=80;
+    b.shockT=0;
+    b.phase2=false;
+  }
   b.clawA+=.08; b.eyeA+=.05;
   b.hitT=Math.max(0,b.hitT-1);
   b.actT--;
+
+  // SKY CRAB KING attacks：泡弾＋地面ドン衝撃波
+  if(b.skyMode && b.active && b.alive){
+    b.phase2 = b.hp <= Math.ceil(b.maxHp/2);
+    if(!b.bubbleT) b.bubbleT=90;
+    b.bubbleT--;
+    if(b.bubbleT<=0){
+      const dir = player.x > b.x ? 1 : -1;
+      const shots = b.phase2 ? [-2.0, -0.7, 0.8] : [-1.2, 0.2];
+      shots.forEach((vy,i)=>{
+        projs.push({
+          x:b.x+(dir>0?b.w:0),
+          y:b.y+b.h/2-4+i*2,
+          vx:dir*(b.phase2?3.2:2.6),
+          vy:vy,
+          w:9,h:9,
+          life:95,
+          kind:'bubble'
+        });
+      });
+      sndBubble();
+      b.bubbleT=b.phase2?58:82;
+    }
+    if(b.shockT>0) b.shockT--;
+  }
 
   // Move
   const prevVy = b.vy;
@@ -1691,7 +2022,7 @@ function updateBoss(){
   // 壁反射
   if(b.x<158*T) b.vx=Math.abs(b.vx);
   if(b.x+b.w>LW*T-T) b.vx=-Math.abs(b.vx);
-  const spd=1.2+(b.maxHp-b.hp)*.35;
+  const spd=(b.skyMode?1.45:1.2)+(b.maxHp-b.hp)*(b.skyMode?.42:.35);
   b.vx=b.vx>0?spd:-spd;
   // フェーズ変化検知
   const newPhase=b.hp>=7?1:b.hp>=4?2:1>=b.hp?4:3;
@@ -1774,15 +2105,37 @@ function updateBoss(){
     b.barrelT=iv+Math.floor(Math.random()*110);
   }
 
+  // SKY CRAB KING phase2 jump assist
+  if(b.skyMode && b.phase2 && onGround && Math.random()<0.018){
+    b.vy=-8.2;
+    b.vx += (player.x>b.x?1:-1)*1.2;
+  }
+
   // 地上でたまにランダム反転（フェーズ問わず）
   if(onGround && Math.random()<0.006) b.vx=-b.vx;
 
   // ── 着地衝撃（着地した瞬間のみ・stompT=180で重複防止） ──
   if(b.stompT>0){ b.stompT--; }
-  if(justLanded && b.stompT===0 && b.hp<4){
-    shakeX=5; shakeY=5; sndShock(); b.stompT=180;
-    addParts(b.x+b.w/2,b.y+b.h,'#ff6600',16);
-    addParts(b.x+b.w/2,b.y+b.h,'#ffaa00',10);
+  if(justLanded && b.stompT===0 && (b.hp<4 || b.skyMode)){
+    shakeX=b.skyMode?8:5; shakeY=b.skyMode?7:5; 
+    if(b.skyMode) sndShockWave(); else sndShock();
+    b.stompT=b.skyMode?110:180;
+    addParts(b.x+b.w/2,b.y+b.h,'#ff6600',b.skyMode?24:16);
+    addParts(b.x+b.w/2,b.y+b.h,'#ffaa00',b.skyMode?18:10);
+    if(b.skyMode){
+      [-1,1].forEach(dir=>{
+        projs.push({
+          x:b.x+b.w/2,
+          y:b.y+b.h-8,
+          vx:dir*(b.phase2?4.0:3.0),
+          vy:-0.5,
+          w:16,h:8,
+          life:70,
+          kind:'shockwave'
+        });
+      });
+      spawnFloat(b.x+b.w/2,b.y-8,'地面ドン!','#ff8844');
+    }
   }
 
   // ── プレイヤーがボスを踏む ──
@@ -2824,6 +3177,7 @@ function loop(){
   drawPhotoCollection();
   if(unusedPhotoViewing) drawPhotoViewerFull();
   drawHUD();
+  drawSkyBossProjectiles();
   drawUpgradeHUD();
   if(paused) drawPauseOverlay();
 }
@@ -2893,6 +3247,7 @@ function drawUpgradeHUD(){
   ctx.fillText('TIME '+fmtTime(nowTime), 164, 7);
   ctx.fillStyle='#9ee7ff';
   ctx.fillText('BEST '+fmtTime(bestClearTime), 164, 21);
+  ctx.textAlign='left'; ctx.fillStyle=currentStage===2?'#ffef5a':'#ffffff'; ctx.fillText(currentStage===2?'STAGE 2':'STAGE 1',70,21);
   ctx.restore();
 
   // boss intro
@@ -2923,7 +3278,7 @@ function drawUpgradeHUD(){
     ctx.fillStyle='#fff';
     ctx.font='bold 7px monospace';
     ctx.textAlign='center';
-    ctx.fillText('KING CRAB', W/2, by-3);
+    ctx.fillText((boss.skyMode?(boss.phase2?'SKY CRAB KING!!':'SKY CRAB KING'):'KING CRAB'), W/2, by-3);
     ctx.fillStyle='#4a0000';
     ctx.fillRect(bx,by,bw,bh);
     ctx.fillStyle='#ff3333';
@@ -2979,6 +3334,32 @@ function drawUpgradeHUD(){
   btn.addEventListener('touchstart', togglePause, {passive:false});
   btn.addEventListener('click', togglePause);
 })();
+
+function drawSkyBossProjectiles(){
+  projs.forEach(pr=>{
+    const x=Math.floor(pr.x-camX), y=Math.floor(pr.y-camY);
+    if(pr.kind==='bubble'){
+      ctx.save();
+      ctx.strokeStyle='#9ee7ff';
+      ctx.fillStyle='rgba(160,230,255,.35)';
+      ctx.lineWidth=2;
+      ctx.beginPath();
+      ctx.arc(x+pr.w/2,y+pr.h/2,pr.w/2,0,Math.PI*2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,.75)';
+      ctx.fillRect(x+2,y+2,2,2);
+      ctx.restore();
+    }else if(pr.kind==='shockwave'){
+      ctx.save();
+      ctx.fillStyle='#ff8844';
+      ctx.fillRect(x,y,pr.w,pr.h);
+      ctx.fillStyle='#ffdd55';
+      ctx.fillRect(x+2,y+2,pr.w-4,2);
+      ctx.restore();
+    }
+  });
+}
+
 </script>
 </body>
 </html>
