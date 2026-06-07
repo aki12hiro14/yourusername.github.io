@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Mobile</title>
+<title>CRAB BOSS ADVENTURE Mobile Final</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -19,53 +19,116 @@ canvas {
   position:fixed;
   left:0;
   right:0;
-  bottom:calc(10px + env(safe-area-inset-bottom));
+  bottom:calc(12px + env(safe-area-inset-bottom));
   z-index:20;
   display:flex;
   justify-content:space-between;
   align-items:flex-end;
-  padding:0 12px;
+  padding:0 18px;
   pointer-events:none;
   user-select:none;
   -webkit-user-select:none;
 }
-#touchControls .pad,
-#touchControls .actions {
-  display:flex;
-  gap:10px;
-  pointer-events:auto;
-}
-#touchControls button {
-  width:56px;
-  height:56px;
+
+#stickArea {
+  width:118px;
+  height:118px;
   border-radius:50%;
-  border:2px solid rgba(255,255,255,.8);
-  background:rgba(0,0,0,.45);
-  color:#fff;
-  font:bold 16px system-ui, sans-serif;
-  -webkit-tap-highlight-color:transparent;
+  border:3px solid rgba(255,255,255,.45);
+  background:radial-gradient(circle, rgba(255,255,255,.18), rgba(0,0,0,.45));
+  position:relative;
+  pointer-events:auto;
   touch-action:none;
 }
-#jumpBtn { width:70px; height:70px; }
+
+#stickKnob {
+  width:52px;
+  height:52px;
+  border-radius:50%;
+  border:2px solid rgba(255,255,255,.85);
+  background:rgba(255,255,255,.22);
+  position:absolute;
+  left:50%;
+  top:50%;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 12px rgba(255,255,255,.25);
+}
+
+#stickHint {
+  position:absolute;
+  left:0;
+  right:0;
+  top:8px;
+  text-align:center;
+  color:rgba(255,255,255,.55);
+  font:bold 10px system-ui, sans-serif;
+  pointer-events:none;
+}
+
+#touchControls .actions {
+  display:grid;
+  grid-template-columns:64px 78px;
+  grid-template-rows:64px 64px;
+  gap:10px;
+  pointer-events:auto;
+  align-items:center;
+  justify-items:center;
+}
+
+#touchControls button {
+  border-radius:50%;
+  border:2px solid rgba(255,255,255,.85);
+  background:rgba(0,0,0,.48);
+  color:#fff;
+  font:bold 18px system-ui, sans-serif;
+  -webkit-tap-highlight-color:transparent;
+  touch-action:none;
+  box-shadow:0 2px 10px rgba(0,0,0,.35);
+}
+
+#jumpBtn {
+  grid-row:1 / span 2;
+  grid-column:2;
+  width:78px;
+  height:78px;
+  font-size:15px;
+}
+
+#fireBtn, #iceBtn {
+  width:62px;
+  height:62px;
+  font-size:28px;
+}
+
+#fireBtn { grid-column:1; grid-row:1; }
+#iceBtn  { grid-column:1; grid-row:2; }
+
 @media (max-width:700px) and (orientation:portrait){
   canvas { width:100vw; height:auto; }
-  #touchControls button { width:52px; height:52px; font-size:15px; }
-  #jumpBtn { width:66px; height:66px; }
+  #touchControls { padding:0 12px; bottom:calc(10px + env(safe-area-inset-bottom)); }
+  #stickArea { width:104px; height:104px; }
+  #stickKnob { width:46px; height:46px; }
+  #touchControls .actions {
+    grid-template-columns:58px 70px;
+    grid-template-rows:58px 58px;
+    gap:8px;
+  }
+  #jumpBtn { width:70px; height:70px; font-size:14px; }
+  #fireBtn, #iceBtn { width:56px; height:56px; font-size:25px; }
 }
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="touchControls" aria-label="スマホ操作ボタン">
-  <div class="pad">
-    <button id="leftBtn">←</button>
-    <button id="rightBtn">→</button>
-    <button id="downBtn">↓</button>
+  <div id="stickArea" aria-label="移動スティック">
+    <div id="stickHint">MOVE</div>
+    <div id="stickKnob"></div>
   </div>
   <div class="actions">
-    <button id="fireBtn">Z</button>
-    <button id="iceBtn">X</button>
-    <button id="jumpBtn">JUMP</button>
+    <button id="fireBtn" aria-label="ファイア">🔥</button>
+    <button id="iceBtn" aria-label="こおり">❄️</button>
+    <button id="jumpBtn" aria-label="ジャンプ">JUMP</button>
   </div>
 </div>
 <script>
@@ -92,37 +155,7 @@ const JUMP_V  = -9.8;
 const RUN_SPD = 2.3;
 
 // Tile IDs
-const AIR=0,SOLID=1,BRICK=2,QBLK=3,COIN=4,PTOP=5,PBOT=6,BFLOOR=7,SPIKE=8,PHOTO=9;
-
-// ── 写真ブロック：写真フォルダのファイルをここに追加してね ──────────
-const PHOTO_FILES = [];  // スマホ公開版：写真機能なし
-const loadedPhotos = [];
-PHOTO_FILES.forEach(src=>{
-  const img=new Image();
-  img.onload=()=>{ loadedPhotos.push(img); console.log('📷 読込OK:', src); };
-  img.onerror=()=>{ console.warn('📷 読込NG:', src); };
-  img.src=src;
-});
-let photoOverlay=null;        // {img, timer, rot} 取得時の一時表示
-const photoCollection=[];     // 左上コレクション（集めた写真）
-let photoViewing=null;        // {img} サムネイルタップ時のフルスクリーン表示
-
-// ランダム選択：「まだ出していない写真」からランダム、全部出たらリセット
-const _shownSet=new Set();
-let _lastPhotoIdx=-1;
-function getNextPhoto(){
-  const n=loadedPhotos.length;
-  if(n===0) return null;
-  if(n===1) return loadedPhotos[0]; // 1枚しかない場合
-  if(_shownSet.size>=n) _shownSet.clear(); // 全部見せたらリセット
-  // まだ見ていないインデックスのうちランダムに選ぶ
-  const avail=[];
-  for(let i=0;i<n;i++) if(!_shownSet.has(i)) avail.push(i);
-  const idx=avail[Math.floor(Math.random()*avail.length)];
-  _shownSet.add(idx);
-  _lastPhotoIdx=idx;
-  return loadedPhotos[idx];
-}
+const AIR=0,SOLID=1,BRICK=2,QBLK=3,COIN=4,PTOP=5,PBOT=6,BFLOOR=7,SPIKE=8;
 
 // ── AUDIO ──────────────────────────────────────────
 let AC=null;
@@ -169,24 +202,12 @@ const sndCamera = ()=>{
   tone(200,.06,'sawtooth',.15,.04);
 };
 
-// 写真をランダムに選んでオーバーレイ表示 ＋ 1UP特典
-function showRandomPhoto(){
-  // スマホ公開版：写真表示は行わず、1UPボーナスだけにする
-  sndPickup();
-  shakeX=4; shakeY=4;
-  const p=player;
-  p.hp=Math.min(5,p.hp+1);
-  spawnFloat(p.x+p.w/2,p.y-8,'1UP!','#00ff88');
-  addParts(p.x+p.w/2,p.y+p.h/2,'#00ff88',18);
-  addParts(p.x+p.w/2,p.y+p.h/2,'#ffffff',10);
-  tone(660,.08,'square',.25,.18); tone(784,.08,'square',.22,.26); tone(1047,.15,'square',.28,.34);
-}
 
 // ── TILE GRID ──────────────────────────────────────
 let tiles = [];
 function getTile(x,y){ if(x<0||x>=LW||y<0||y>=LH) return SOLID; return tiles[y*LW+x]; }
 function setTile(x,y,id){ if(x>=0&&x<LW&&y>=0&&y<LH) tiles[y*LW+x]=id; }
-function isSolid(id){ return id===SOLID||id===BRICK||id===QBLK||id===PTOP||id===PBOT||id===BFLOOR||id===PHOTO; }
+function isSolid(id){ return id===SOLID||id===BRICK||id===QBLK||id===PTOP||id===PBOT||id===BFLOOR; }
 
 function fillRect(x,y,w,h,id){ for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) setTile(x+dx,y+dy,id); }
 function fillRow(y,x0,x1,id){ for(let x=x0;x<x1;x++) setTile(x,y,id); }
@@ -259,12 +280,12 @@ function buildLevel(){
   setTile(150,GR-3,QBLK); setTile(152,GR-3,QBLK); setTile(154,GR-3,QBLK);
   for(let x=149;x<156;x++) setTile(x,GR-1,COIN);
 
-  // ─ スマホ公開版：ボーナス？ブロック ─
-  setTile(8,  GR-4, PHOTO);   // section1：スタート直後の地面上
-  setTile(50, GR-4, PHOTO);   // section2：階段を上がったあとの地面
-  setTile(66, GR-4, PHOTO);   // section3：プラットフォームの上
-  setTile(88, GR-4, PHOTO);   // section4：トゲの手前の安全地帯
-  setTile(130,GR-4, PHOTO);   // section5：ボス前の地面
+  // ─ スマホ公開版：ボーナス？ブロック（写真なし） ─
+  setTile(8,  GR-4, QBLK);   // section1：スタート直後の地面上
+  setTile(50, GR-4, QBLK);   // section2：階段を上がったあとの地面
+  setTile(66, GR-4, QBLK);   // section3：プラットフォームの上
+  setTile(88, GR-4, QBLK);   // section4：トゲの手前の安全地帯
+  setTile(130,GR-4, QBLK);   // section5：ボス前の地面
   // ─ Boss Arena ─
   fillRect(157,GR,LW-157,LH-GR,BFLOOR);
   // no left wall — player can freely enter/exit
@@ -328,6 +349,7 @@ const QITEMS = {
 let player, enemies, items, projs, parts, coinsDone, brokenQ, floatTxts, fireballs, iceballs, thrownEnemies;
 let boss, camX, camY, tick, gameState;
 let shakeX=0, shakeY=0, bossWarn=0;
+const unusedPhotoCollection=[]; let unusedPhotoOverlay=null; let unusedPhotoViewing=null;
 
 function resetGame(){
   buildLevel();
@@ -374,7 +396,7 @@ document.addEventListener('keydown',e=>{
   initAudio(); keys[e.code]=true;
   if(['Space','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
   // フルスクリーン閲覧中はどのキーでも閉じる
-  if(photoViewing){ photoViewing=null; return; }
+  if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
   if(gameState==='win') gameState='title';
 });
@@ -382,7 +404,7 @@ document.addEventListener('keyup',e=>keys[e.code]=false);
 canvas.addEventListener('click',e=>{
   initAudio();
   // フルスクリーン閲覧中はクリックで閉じる
-  if(photoViewing){ photoViewing=null; return; }
+  if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
   else if(gameState==='win') gameState='title';
 });
@@ -414,12 +436,91 @@ function bindTouchButton(id, code){
   btn.addEventListener('mouseup',off);
   btn.addEventListener('mouseleave',off);
 }
-bindTouchButton('leftBtn','ArrowLeft');
-bindTouchButton('rightBtn','ArrowRight');
-bindTouchButton('downBtn','ArrowDown');
+
+// N64風スティック：左・右・下をアナログ感覚で入力
+function setupVirtualStick(){
+  const area=document.getElementById('stickArea');
+  const knob=document.getElementById('stickKnob');
+  if(!area||!knob) return;
+
+  const resetStick=()=>{
+    keys['ArrowLeft']=false;
+    keys['ArrowRight']=false;
+    keys['ArrowDown']=false;
+    knob.style.left='50%';
+    knob.style.top='50%';
+  };
+
+  const moveStick=(clientX,clientY)=>{
+    initAudio();
+    if(gameState==='title'||gameState==='gameover'){
+      resetGame(); gameState='play';
+    } else if(gameState==='win'){
+      gameState='title';
+    }
+
+    const r=area.getBoundingClientRect();
+    const cx=r.left+r.width/2;
+    const cy=r.top+r.height/2;
+    let dx=clientX-cx;
+    let dy=clientY-cy;
+    const max=r.width*0.32;
+    const len=Math.hypot(dx,dy);
+    if(len>max){
+      dx=dx/len*max;
+      dy=dy/len*max;
+    }
+
+    knob.style.left=`calc(50% + ${dx}px)`;
+    knob.style.top =`calc(50% + ${dy}px)`;
+
+    const threshold=max*0.35;
+    keys['ArrowLeft']  = dx < -threshold;
+    keys['ArrowRight'] = dx >  threshold;
+    keys['ArrowDown']  = dy >  threshold;
+  };
+
+  area.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    const t=e.changedTouches[0];
+    moveStick(t.clientX,t.clientY);
+  },{passive:false});
+
+  area.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    const t=e.changedTouches[0];
+    moveStick(t.clientX,t.clientY);
+  },{passive:false});
+
+  area.addEventListener('touchend',e=>{
+    e.preventDefault();
+    resetStick();
+  },{passive:false});
+
+  area.addEventListener('touchcancel',e=>{
+    e.preventDefault();
+    resetStick();
+  },{passive:false});
+
+  let mouseDown=false;
+  area.addEventListener('mousedown',e=>{
+    mouseDown=true;
+    moveStick(e.clientX,e.clientY);
+  });
+  window.addEventListener('mousemove',e=>{
+    if(mouseDown) moveStick(e.clientX,e.clientY);
+  });
+  window.addEventListener('mouseup',()=>{
+    mouseDown=false;
+    resetStick();
+  });
+}
+
+setupVirtualStick();
 bindTouchButton('jumpBtn','Space');
 bindTouchButton('fireBtn','KeyZ');
 bindTouchButton('iceBtn','KeyX');
+
 
 
 // ── COLLISION ──────────────────────────────────────
@@ -488,15 +589,7 @@ function hitBlock(tx,ty){
     if(!brokenQ[k]){
       brokenQ[k]=true; setTile(tx,ty,SOLID);
       spawnItem(tx,ty,QITEMS[tx]||'coin'); sndQBlk();
-    }
-  } else if(id===PHOTO){
-    const k=`${tx},${ty}`;
-    if(!brokenQ[k]){
-      brokenQ[k]=true; setTile(tx,ty,SOLID);
-      showRandomPhoto();
-      spawnFloat(tx*T+8,(ty-1)*T,'📷','#ff88cc');
-    }
-  }
+    }}
 }
 
 function spawnItem(tx,ty,type){
@@ -625,12 +718,7 @@ function update(){
         addParts(tx*T+8,tyB*T+8,'#c84b0a',10); p.score+=50; sndBreak();
       } else if(id===QBLK && !brokenQ[k]){
         brokenQ[k]=true; setTile(tx,tyB,SOLID);
-        spawnItem(tx,tyB-1,QITEMS[tx]||'coin'); sndQBlk();
-      } else if(id===PHOTO && !brokenQ[k]){
-        brokenQ[k]=true; setTile(tx,tyB,SOLID);
-        showRandomPhoto();
-        spawnFloat(tx*T+8,(tyB-1)*T,'📷','#ff88cc');
-      } else if(id===COIN && !coinsDone[k]){
+        spawnItem(tx,tyB-1,QITEMS[tx]||'coin'); sndQBlk();} else if(id===COIN && !coinsDone[k]){
         coinsDone[k]=true; p.coins++; p.score+=100;
         spawnFloat(tx*T+8,(tyB-.5)*T,'100','#ffd700');
         addParts(tx*T+8,tyB*T,'#ffd700',4); sndCoin();
@@ -1071,33 +1159,6 @@ function drawTile(id,sx,sy,tx,ty){
       ctx.beginPath(); ctx.moveTo(sx+2+i*7,sy+T); ctx.lineTo(sx+6+i*7,sy+4); ctx.lineTo(sx+10+i*7,sy+T); ctx.fill();
     }
     ctx.fillStyle='#ffaa88'; ctx.fillRect(sx+4,sy+4,2,2); ctx.fillRect(sx+11,sy+4,2,2);
-  } else if(id===PHOTO){
-    const used=!!brokenQ[`${tx},${ty}`];
-    // ピンク・マゼンタのカメラブロック
-    const bc=used?'#888':'#e040a0';
-    const bl=used?'#aaa':'#ff66cc';
-    const bd=used?'#666':'#aa0077';
-    ctx.fillStyle=bc; ctx.fillRect(sx,sy,T,T);
-    ctx.fillStyle=bl; ctx.fillRect(sx,sy,T,3); ctx.fillRect(sx,sy,3,T);
-    ctx.fillStyle=bd; ctx.fillRect(sx+T-3,sy,3,T); ctx.fillRect(sx,sy+T-3,T,3);
-    // 点滅アニメ
-    const blink=!used && Math.floor(tick/10)%2;
-    if(!used){
-      // カメラアイコン（ピクセルアート）
-      const cx=sx+T/2, cy=sy+T/2;
-      ctx.fillStyle=blink?'#fff':'#ffccee';
-      // レンズ（丸）
-      ctx.fillRect(cx-4,cy-3,8,6);   // 外円
-      ctx.fillStyle=blink?'#ffccee':'#fff';
-      ctx.fillRect(cx-2,cy-1,4,2);   // 内レンズ反射
-      ctx.fillStyle=bd;
-      ctx.fillRect(cx-3,cy-2,6,4);   // ボディ外
-      ctx.fillStyle=blink?'#fff':'#ffaadd';
-      ctx.fillRect(cx-1,cy-1,2,2);   // レンズ中心
-      // 上のコブ（カメラ上部）
-      ctx.fillStyle=blink?'#fff':'#ffccee';
-      ctx.fillRect(cx-2,sy+3,4,3);
-    }
   }
 }
 
@@ -1448,12 +1509,10 @@ function drawFlag(){
   ctx.fillStyle='#ff8888'; ctx.fillRect(fx+4,fy+7,5,4);
   ctx.fillStyle='#ffd700'; ctx.fillRect(fx-1,fy+2,5,5);
 }
-
-// ── 写真オーバーレイ（ポラロイド風） ──────────────────────
 function drawPhotoOverlay(){
-  if(!photoOverlay || photoOverlay.timer<=0) return;
-  const t=photoOverlay.timer;
-  photoOverlay.timer--;
+  if(!unusedPhotoOverlay || unusedPhotoOverlay.timer<=0) return;
+  const t=unusedPhotoOverlay.timer;
+  unusedPhotoOverlay.timer--;
 
   // フラッシュ（最初の8フレーム）
   if(t>82){
@@ -1469,7 +1528,7 @@ function drawPhotoOverlay(){
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.translate(W/2, H/2);
-  ctx.rotate(photoOverlay.rot);
+  ctx.rotate(unusedPhotoOverlay.rot);
   ctx.scale(sc, sc);
 
   const pw=170, ph=135, fr=10, bot=24;
@@ -1478,13 +1537,11 @@ function drawPhotoOverlay(){
   ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=14;
   ctx.fillRect(-pw/2-fr,-ph/2-fr,pw+fr*2,ph+fr*2+bot);
   ctx.shadowBlur=0;
-
-  // 写真
   ctx.save();
   ctx.imageSmoothingEnabled=true;
-  if(photoOverlay.img){
+  if(unusedPhotoOverlay.img){
     ctx.beginPath(); ctx.rect(-pw/2,-ph/2,pw,ph); ctx.clip();
-    const im=photoOverlay.img;
+    const im=unusedPhotoOverlay.img;
     const ir=im.width/im.height, pr=pw/ph;
     let dw=pw,dh=ph,dx=-pw/2,dy=-ph/2;
     if(ir>pr){ dh=ph; dw=ph*ir; dx=-dw/2; }
@@ -1501,7 +1558,7 @@ function drawPhotoOverlay(){
   // 下部テキスト
   ctx.fillStyle='#cc0077'; ctx.font='bold 7px monospace';
   ctx.textAlign='center'; ctx.textBaseline='middle';
-  const pidx=loadedPhotos.indexOf(photoOverlay.img)+1;
+  const pidx=loadedPhotos.indexOf(unusedPhotoOverlay.img)+1;
   ctx.fillText(`📷 かぞくのおもいで！ [${pidx}/${loadedPhotos.length}]  ❤️+1`,0,ph/2+bot/2);
 
   ctx.restore();
@@ -1509,13 +1566,13 @@ function drawPhotoOverlay(){
 
 // ── 左上コレクションサムネイル ──────────────────────────
 function drawPhotoCollection(){
-  if(photoCollection.length===0) return;
+  if(unusedPhotoCollection.length===0) return;
   const TW=22, TH=16, GAP=2, OX=2, OY=17;
   // 背景パネル
   ctx.fillStyle='rgba(0,0,0,.55)';
-  ctx.fillRect(OX-1,OY-1,photoCollection.length*(TW+GAP)-GAP+2,TH+2);
+  ctx.fillRect(OX-1,OY-1,unusedPhotoCollection.length*(TW+GAP)-GAP+2,TH+2);
   ctx.imageSmoothingEnabled=true;
-  photoCollection.forEach((img,i)=>{
+  unusedPhotoCollection.forEach((img,i)=>{
     const tx=OX+i*(TW+GAP), ty=OY;
     // サムネイル描画
     ctx.save();
@@ -1535,16 +1592,14 @@ function drawPhotoCollection(){
   // ロード済み枚数表示（デバッグ兼ね）
   ctx.fillStyle='rgba(255,220,240,.85)'; ctx.font='5px monospace';
   ctx.textAlign='left'; ctx.textBaseline='top';
-  ctx.fillText(`${photoCollection.length}/${loadedPhotos.length}枚`, OX, OY+TH+2);
-  if(photoCollection.length===1 && tick%120<60){
+  ctx.fillText(`${unusedPhotoCollection.length}/${loadedPhotos.length}枚`, OX, OY+TH+2);
+  if(unusedPhotoCollection.length===1 && tick%120<60){
     ctx.fillStyle='rgba(255,200,220,.9)';
     ctx.fillText('↑クリックで見れる', OX+30, OY+TH+2);
   }
 }
-
-// ── フルスクリーン写真閲覧（ゲームポーズ） ────────────────
 function drawPhotoViewerFull(){
-  if(!photoViewing) return;
+  if(!unusedPhotoViewing) return;
   // 暗幕
   ctx.fillStyle='rgba(0,0,0,.88)'; ctx.fillRect(0,0,W,H);
   ctx.save();
@@ -1555,12 +1610,11 @@ function drawPhotoViewerFull(){
   ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=18;
   ctx.fillRect(-pw/2-fr,-ph/2-fr,pw+fr*2,ph+fr*2+bot);
   ctx.shadowBlur=0;
-  // 写真
   ctx.save();
   ctx.imageSmoothingEnabled=true;
-  if(photoViewing.img){
+  if(unusedPhotoViewing.img){
     ctx.beginPath(); ctx.rect(-pw/2,-ph/2,pw,ph); ctx.clip();
-    const im=photoViewing.img;
+    const im=unusedPhotoViewing.img;
     const ir=im.width/im.height, pr=pw/ph;
     let dw=pw,dh=ph,dx=-pw/2,dy=-ph/2;
     if(ir>pr){ dh=ph; dw=ph*ir; dx=-dw/2; }
@@ -1744,7 +1798,7 @@ function loop(){
   if(gameState==='win')     { drawWin(); return; }
   if(gameState==='gameover'){ drawGameOver(); return; }
 
-  if(!photoViewing) update(); // サムネイル閲覧中はゲームをポーズ
+  if(!unusedPhotoViewing) update(); // サムネイル閲覧中はゲームをポーズ
 
   // Background
   const bg=['#5c94fc','#70a8fc','#84bcfc'];
@@ -1797,7 +1851,7 @@ function loop(){
   drawPlayer();
   drawPhotoOverlay();          // 取得時の一時表示（1.5秒）
   drawPhotoCollection();       // 左上コレクションサムネイル
-  if(photoViewing) drawPhotoViewerFull(); // フルスクリーン閲覧（ゲームポーズ）
+  if(unusedPhotoViewing) drawPhotoViewerFull(); // フルスクリーン閲覧（ゲームポーズ）
   drawHUD();
 }
 
