@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Sky Boss</title>
+<title>CRAB BOSS ADVENTURE Water Easy</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -1222,15 +1222,22 @@ function movePlayer(){
   // 溝死亡：全部の溝で一貫してGR+4px落下でダメージ
   {
     const cx=Math.floor((p.x+p.w/2)/T);
-    const cy=Math.floor((p.y+p.h/2)/T);
-    const inWaterNow=(getTile(cx,cy)===WATER || getTile(cx,Math.floor((p.y+p.h-1)/T))===WATER);
-    // 水中では落下死させない。水エリア最下部まで沈んだ時だけ軽く戻す。
+    const footY=Math.floor((p.y+p.h-1)/T);
+    const midY=Math.floor((p.y+p.h/2)/T);
+    const inWaterNow=(getTile(cx,midY)===WATER || getTile(cx,footY)===WATER);
+
+    // 水中はかなり深く沈むまで死亡扱いにしない。
+    // 1面の水は「泳げる場所」として扱い、底まで沈んだらダメージ＋水面へ戻す。
     if(inWaterNow){
-      if(p.y > (LH-2)*T){
-        p.y=(GR-1)*T;
-        p.vy=-3;
-        p.invT=60;
-        spawnFloat(p.x+p.w/2,p.y-8,'ぷはっ','#9ee7ff');
+      const waterDangerY=(LH-1)*T - 6;  // 画面下ギリギリまで沈んだら危険
+      if(p.y+p.h > waterDangerY && p.invT===0){
+        hurtPlayer();
+        p.x=Math.max(p.x-24, 55*T);
+        p.y=(GR-2)*T;
+        p.vy=-4;
+        p.invT=90;
+        spawnFloat(p.x+p.w/2,p.y-8,'深すぎる!','#9ee7ff');
+        addParts(p.x+p.w/2,p.y+p.h/2,'#9ee7ff',18);
       }
     } else if(p.y > GR*T+4 && !isSolid(getTile(cx, GR))){
       hurtPlayer();
@@ -1385,12 +1392,12 @@ function update(){
   // 水中判定
   {
     const wTx=Math.floor((p.x+p.w/2)/T);
-    const wTyMid=Math.floor((p.y+p.h*.55)/T);
+    const wTyMid=Math.floor((p.y+p.h*.65)/T);
     const wTyFoot=Math.floor((p.y+p.h-1)/T);
     p.inWater=(getTile(wTx,wTyMid)===WATER || getTile(wTx,wTyFoot)===WATER);
   }
   if(p.inWater){
-    p.vy=Math.min(2.5, p.vy+GRAVITY*.12);  // 水中:重力弱、ゆっくり沈む
+    p.vy=Math.min(2.0, p.vy+GRAVITY*.08);  // 水中:よりゆっくり沈む
     p.vx*=.82;
     p.onGround=false;
     p.djumpUsed=false;
@@ -1399,7 +1406,7 @@ function update(){
   }
 
   if(p.inWater){
-    if(jump && !p.jumpHeld){ p.vy=-3.8; p.jumpHeld=true; sndJump(); }  // 水中泳ぎ
+    if(jump && !p.jumpHeld){ p.vy=-4.4; p.jumpHeld=true; sndJump(); }  // 水中泳ぎ
     if(!jump) p.jumpHeld=false;
   } else {
     if(jump && p.onGround && !p.jumpHeld){ p.vy=JUMP_V*(p.mini?1.4:1); p.jumpHeld=true; p.djumpUsed=false; sndJump(); }
