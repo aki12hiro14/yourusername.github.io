@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>CRAB BOSS ADVENTURE Mobile Final Fixed</title>
+<title>CRAB BOSS ADVENTURE Water Fixed</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
 html, body { width:100%; height:100%; overflow:hidden; background:#000; touch-action:none; }
@@ -204,6 +204,29 @@ canvas {
     rgba(20,120,190,.66);
 }
 
+#pauseBtn {
+  position:fixed;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 14px;
+  z-index: 25;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.75);
+  background: rgba(0,0,0,.52);
+  color: #fff;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  box-shadow: 0 2px 10px rgba(0,0,0,.4);
+  transition: transform .08s, filter .08s;
+}
+#pauseBtn:active { transform: scale(.92); filter: brightness(1.3); }
+
 #startOverlay {
   position:fixed;
   inset:0;
@@ -249,11 +272,12 @@ canvas {
 </head>
 <body>
 <canvas id="c"></canvas>
+<button id="pauseBtn" aria-label="ポーズ">⏸</button>
 <div id="startOverlay">
   <div id="startOverlayInner">
     <h1>🦀 CRAB BOSS</h1>
     <p>スティックかJUMPでスタート</p>
-    <p>🔥 ファイア　❄️ こおり</p>
+    <p>🔥 くるくる攻撃　❄️ こおり</p><p>🪶 モモンガ：JUMP長押しで滑空</p>
   </div>
 </div>
 <div id="touchControls" aria-label="スマホ操作ボタン">
@@ -287,11 +311,26 @@ const LH = 15;   // level height (tiles)
 const GR = 11;   // ground row
 
 const GRAVITY = 0.46;
-const JUMP_V  = -9.8;
+const JUMP_V  = -8.5;
 const RUN_SPD = 2.3;
 
 // Tile IDs
-const AIR=0,SOLID=1,BRICK=2,QBLK=3,COIN=4,PTOP=5,PBOT=6,BFLOOR=7,SPIKE=8;
+const AIR=0,SOLID=1,BRICK=2,QBLK=3,COIN=4,PTOP=5,PBOT=6,BFLOOR=7,SPIKE=8,SPRING=9,DASHPAD=10,WATER=11;
+
+
+// ── PIPE SPAWN SYSTEM ─────────────────────────────────────
+const PIPE_DEFS = [
+  {x: 52*T+8, pipeTopY: (GR-1)*T},   // パイプ1
+  {x: 80*T+8, pipeTopY: (GR-2)*T},   // パイプ2
+  {x:140*T+8, pipeTopY: (GR-1)*T},   // パイプ3
+  {x:145*T+8, pipeTopY: (GR-2)*T},   // パイプ4
+];
+let pipeTimers=[], pipeWarn=[];
+const sndPipePop = ()=>{
+  tone(180,.05,'square',.22);
+  tone(280,.07,'square',.20,.05);
+  tone(140,.12,'sawtooth',.28,.10);
+};
 
 // ── AUDIO ──────────────────────────────────────────
 let AC=null;
@@ -340,6 +379,13 @@ const sndCamera = ()=>{
 
 
 
+const sndSpring = ()=>{ tone(300,.03,'square',.15); tone(600,.04,'square',.18,.03); tone(1000,.05,'square',.20,.07); tone(1500,.10,'square',.18,.11); };
+const sndBarrel = ()=>{ tone(160,.07,'sawtooth',.22); tone(110,.05,'sawtooth',.18,.06); };
+const sndHammer = ()=>{ tone(200,.05,'sawtooth',.32); tone(140,.09,'sawtooth',.28,.04); tone(80,.12,'sawtooth',.22,.10); };
+const sndCape = ()=>{ tone(520,.05,'square',.18); tone(720,.06,'square',.16,.04); tone(980,.08,'square',.14,.10); };
+const sndSpin = ()=>{ tone(700,.035,'square',.12); tone(500,.04,'sawtooth',.10,.035); };
+
+
 function startBGM(){
   bgmOn=true;
 }
@@ -369,7 +415,7 @@ function saveProgress(){
   if(!player || gameState!=='play') return;
   const data={
     x:player.x, y:player.y, hp:player.hp, big:player.big, fire:player.fire,
-    coins:player.coins, score:player.score, iceReady:player.iceReady,
+    coins:player.coins, score:player.score, iceReady:player.iceReady, cape:player.cape, capeT:player.capeT,
     t:Date.now()
   };
   localStorage.setItem('crabSave',JSON.stringify(data));
@@ -385,6 +431,8 @@ function loadProgressIntoPlayer(){
   player.coins=data.coins||0;
   player.score=data.score||0;
   player.iceReady=data.iceReady||0;
+  player.cape=!!data.cape;
+  player.capeT=data.capeT||0;
 }
 function clearSavedProgress(){
   localStorage.removeItem('crabSave');
@@ -398,7 +446,7 @@ function hideStartOverlay(){
 let tiles = [];
 function getTile(x,y){ if(x<0||x>=LW||y<0||y>=LH) return SOLID; return tiles[y*LW+x]; }
 function setTile(x,y,id){ if(x>=0&&x<LW&&y>=0&&y<LH) tiles[y*LW+x]=id; }
-function isSolid(id){ return id===SOLID||id===BRICK||id===QBLK||id===PTOP||id===PBOT||id===BFLOOR; }
+function isSolid(id){ return id===SOLID||id===BRICK||id===QBLK||id===PTOP||id===PBOT||id===BFLOOR||id===SPRING; }
 
 function fillRect(x,y,w,h,id){ for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++) setTile(x+dx,y+dy,id); }
 function fillRow(y,x0,x1,id){ for(let x=x0;x<x1;x++) setTile(x,y,id); }
@@ -416,28 +464,28 @@ function buildLevel(){
 
   // ─ Section 2: Platforms ─
   fillRect(25,GR,4,LH-GR,AIR);               // gap 1（4タイル幅）
-  fillRect(27,GR-3,4,1,SOLID);               // platform over gap（高く上げて通れるように）
-  setTile(30,GR-4,QBLK);
+  fillRect(27,GR-3,4,1,SOLID);               // platform over gap（壊れない）
+  setTile(28,GR-4,QBLK);  // 中央寄りに移動（端っこ浮き防止）
   setTile(32,GR-3,BRICK); setTile(33,GR-3,BRICK);
   setTile(34,GR-5,BRICK); setTile(35,GR-5,QBLK); setTile(36,GR-5,BRICK);
   for(let x=31;x<35;x++) setTile(x,GR-2,COIN);
   // 階段（各ステップ1タイル高い）
-  for(let i=0;i<4;i++) fillRect(38+i,GR-1-i,1,1+i,SOLID);
-  fillRow(GR-5,42,50,SOLID);                // upper platform
+  for(let i=0;i<4;i++) fillRect(38+i,GR-1-i,1,1+i,SOLID); // 階段はSOLID
+  fillRow(GR-5,41,50,SOLID);                // upper platform（壊れない）
   for(let x=43;x<50;x+=2) setTile(x,GR-8,COIN);  // 2タイル上へ（大きくなっても通れる）
   setTile(46,GR-9,QBLK);
   setTile(52,GR-1,PTOP); setTile(52,GR,PBOT); // pipe 1
   setTile(53,GR-1,PTOP); setTile(53,GR,PBOT);
 
   // ─ Section 3: Multi-level ─
-  fillRect(56,GR,6,LH-GR,AIR);
-  fillRect(57,GR-3,4,1,SOLID);
+  fillRect(56,GR,6,LH-GR,AIR);   // 水エリア（後でWATERで埋める）
+  fillRect(57,GR-3,4,1,BRICK);
   setTile(58,GR-5,COIN); setTile(59,GR-5,COIN);
   fillRect(63,GR,6,LH-GR,AIR);
-  fillRect(63,GR-4,5,1,SOLID);
+  fillRect(63,GR-4,5,1,BRICK);
   for(let x=64;x<68;x++) setTile(x,GR-5,COIN);
   fillRow(GR-5,70,76,BRICK);
-  fillRow(GR-8,72,80,SOLID);
+  fillRow(GR-8,72,80,BRICK);
   setTile(73,GR-9,QBLK); setTile(74,GR-9,QBLK);
   for(let x=73;x<78;x++) setTile(x,GR-2,COIN);
   setTile(80,GR-2,PTOP); setTile(80,GR-1,PBOT); setTile(80,GR,PBOT); // pipe 2
@@ -446,19 +494,19 @@ function buildLevel(){
   // ─ Section 4: Danger ─
   for(let x=92;x<95;x++) setTile(x,GR-1,SPIKE);
   fillRect(95,GR,5,LH-GR,AIR);
-  fillRect(95,GR-3,3,1,SOLID);
+  fillRect(95,GR-3,3,1,BRICK);
   fillRect(100,GR,4,LH-GR,AIR);
-  fillRect(100,GR-4,3,1,SOLID);  // 2T→4T に引き上げ（大きくなっても通れる）
+  fillRect(100,GR-4,3,1,BRICK);  // 2T→4T に引き上げ（大きくなっても通れる）
   for(let x=101;x<103;x++) setTile(x,GR-3,COIN);
   fillRect(105,GR,6,LH-GR,AIR);
-  fillRect(106,GR-4,4,1,SOLID);
+  fillRect(106,GR-4,4,1,BRICK);
   setTile(107,GR-5,QBLK);
   [GR-4,GR-6,GR-7,GR-6,GR-4].forEach((y,i)=>setTile(112+i,y,COIN));
   fillRow(GR-4,115,125,SOLID);
   for(let x=116;x<124;x++) setTile(x,GR-5,COIN);
   setTile(119,GR-8,QBLK); setTile(122,GR-8,QBLK); // 2段上げてでかくなっても通れる
   fillRect(126,GR,4,LH-GR,AIR);
-  fillRect(126,GR-3,4,1,SOLID);
+  fillRect(126,GR-3,4,1,BRICK);
 
   // ─ Section 5: Pre-boss ─
   for(let x=131;x<138;x+=2) setTile(x,GR-3,BRICK);
@@ -471,6 +519,16 @@ function buildLevel(){
   setTile(150,GR-3,QBLK); setTile(152,GR-3,QBLK); setTile(154,GR-3,QBLK);
   for(let x=149;x<156;x++) setTile(x,GR-1,COIN);
 
+  // ─ バネ（スプリング） ─
+  setTile(55,GR-1,SPRING);   // section3入口
+  setTile(90,GR-1,SPRING);   // section4（トゲ手前の安全地帯）
+  setTile(158,GR-1,SPRING);  // ボスエリア入口
+  // 海エリア（section3 ダブルギャップを水に）
+  for(let wy=GR+1;wy<LH;wy++) for(let wx=55;wx<=69;wx++) setTile(wx,wy,WATER);
+  // 水中の足場（コイン付き）
+  for(let wfx=57;wfx<=67;wfx++) setTile(wfx,GR+2,SOLID); // 水底の台
+  for(let wfx=58;wfx<=66;wfx++) setTile(wfx,GR+1,COIN);  // 水底コイン
+
   // ─ スマホ公開版：ボーナス？ブロック（写真なし） ─
   setTile(8,  GR-4, QBLK);   // section1：スタート直後の地面上
   setTile(50, GR-4, QBLK);   // section2：階段を上がったあとの地面
@@ -481,6 +539,7 @@ function buildLevel(){
   fillRect(157,GR,LW-157,LH-GR,BFLOOR);
   // no left wall — player can freely enter/exit
   fillRow(GR-8,159,216,SOLID);          // ceiling
+  for(let gx=163;gx<216;gx+=7) setTile(gx,GR-8,AIR); // 隙間
   fillRow(GR-5,162,167,SOLID);          // platforms to jump
   fillRow(GR-5,174,179,SOLID);
   fillRow(GR-5,186,191,SOLID);
@@ -491,14 +550,32 @@ const RANK_KEY='crabRankings';
 function loadRankings(){ return JSON.parse(localStorage.getItem(RANK_KEY)||'[]'); }
 function saveRanking(name,score){
   const list=loadRankings();
-  list.push({name:name.slice(0,6)||'???', score, time:clearTimeMs||0, date:new Date().toLocaleDateString('ja-JP')});
-  list.sort((a,b)=>b.score-a.score);
+  const entry={
+    name:name.slice(0,6)||'???',
+    score,
+    time:clearTimeMs||0,
+    date:new Date().toLocaleDateString('ja-JP'),
+    current:true
+  };
+  list.push(entry);
+  list.sort((a,b)=>{
+    if(b.score!==a.score) return b.score-a.score;
+    if((a.time||999999999)!==(b.time||999999999)) return (a.time||999999999)-(b.time||999999999);
+    return 0;
+  });
+  const rank=list.indexOf(entry)+1;
+  lastClearRank=rank;
+  lastClearRankIn=rank>0 && rank<=5;
+  list.forEach(r=>delete r.current);
   list.splice(5);
   localStorage.setItem(RANK_KEY,JSON.stringify(list));
+  return rank;
 }
 let scoreSubmitted=false;
 function submitScore(){
-  if(scoreSubmitted) return; scoreSubmitted=true;
+  if(scoreSubmitted) return; 
+  scoreSubmitted=true;
+  lastClearScore=player.score;
   const name=prompt('なまえをにゅうりょく（6もじまで）','プレイヤー')||'???';
   saveRanking(name, player.score);
 }
@@ -530,25 +607,31 @@ function drawRanking(ox,oy,bw){
 // Q-block item map
 const QITEMS = {
   6:'mushroom', 12:'coin', 15:'flower',
-  30:'coin',    35:'ice',  46:'coin',
+  30:'coin',    35:'cape',  46:'cape',
   73:'mushroom',74:'coin',
-  107:'flower', 119:'ice', 122:'mushroom',
-  134:'coin',   150:'flower',152:'ice', 154:'coin',
+  107:'flower', 110:'mini',  119:'djump', 122:'cape',
+  134:'hammer', 148:'magnet',150:'flower',152:'ice', 154:'coin',
 };
 
 // ── GAME OBJECTS ───────────────────────────────────
-let player, enemies, items, projs, parts, coinsDone, brokenQ, floatTxts, fireballs, iceballs, thrownEnemies;
+let player, enemies, items, projs, parts, coinsDone, brokenQ, floatTxts, fireballs, iceballs, thrownEnemies, barrels, movPlats;
 let boss, camX, camY, tick, gameState;
 let shakeX=0, shakeY=0, bossWarn=0;
+let checkpointX=0, checkpointActivated=false, checkpointBig=false, checkpointFire=false;
 
 let gameStartTime=0, clearTimeMs=0;
 let bestClearTime=Number(localStorage.getItem('crabBestClearTime')||0);
 let savedProgress=JSON.parse(localStorage.getItem('crabSave')||'null');
 let bgmOn=false;
 let bgmTimer=0;
+let paused=false;
 let bossIntroT=0;
 let bossDefeatT=0;
 let hudPulse=0;
+let lastClearRank=0;
+let lastClearIsBest=false;
+let lastClearRankIn=false;
+let lastClearScore=0;
 
 const unusedPhotoCollection=[]; let unusedPhotoOverlay=null; let unusedPhotoViewing=null;
 
@@ -564,12 +647,15 @@ function resetGame(){
     fire:false, fireCD:0, fireHeld:false, groundPound:false,
     iceReady:0, iceCD:0, carrying:null, throwCD:0,
     nextLifeScore:5000,
+    djump:false, djumpUsed:false, cape:false, capeT:0, spinT:0, spinCD:0, glide:false, hammerT:0, wallT:0, wallDir:0, 
+    inWater:false, swimT:0, bubbleT:0,
+    combo:0, comboT:0, mini:false, miniT:0, magnet:false, magnetT:0,
   };
   enemies = [
     {x:18,y:GR-1,vx: .8},  // section1 前半
-    {x:23,y:GR-1,vx:-.8},  // section1 後半（gap手前）
-    {x:45,y:GR-6,vx: .8},  // 階段上のプラットフォーム（x=42-49, y=GR-5）
-    {x:62,y:GR-1,vx:-.8},  // section3 gap後（x=56-61がgap, x=62から地面）
+    {x:13,y:GR-1,vx: .8},  // section1 後半（gap前を避けて左に退避）
+    {x:44,y:GR-6,vx: .8},  // 階段上のプラットフォーム中央寄り
+    {x:59,y:GR-4,vx: .8},  // section3 ブリッジプラットフォーム上
     {x:78,y:GR-9,vx: .8},  // section3 上段プラットフォーム（y=GR-8）
     {x:90,y:GR-1,vx:-.8},  // section4 spike手前
     {x:103,y:GR-3,vx: .8}, // section4 中段プラットフォーム
@@ -582,13 +668,23 @@ function resetGame(){
     x:170*T, y:(GR-4)*T, w:56, h:40,
     vx:1.2, vy:0, hp:6, maxHp:6,
     alive:true, active:false,
-    hitT:0, actT:180, stompT:0, clawA:0, eyeA:0, _deadTimer:0, iceHits:0,
+    hitT:0, actT:180, stompT:0, clawA:0, eyeA:0, _deadTimer:0, iceHits:0, barrelT:240,
   };
 
-  items=[]; projs=[]; parts=[]; floatTxts=[]; fireballs=[]; iceballs=[]; thrownEnemies=[];
+  items=[]; projs=[]; parts=[]; floatTxts=[]; fireballs=[]; iceballs=[]; thrownEnemies=[]; barrels=[];
+  // 動く足場（ボスエリア）
+  movPlats=[
+    {x:163*T,y:(GR-4)*T,w:3*T,h:T,vx:1.4,vy:0,x0:163*T,y0:(GR-4)*T,range:4*T},
+    {x:177*T,y:(GR-6)*T,w:3*T,h:T,vx:-1.2,vy:0,x0:177*T,y0:(GR-6)*T,range:4*T},
+    {x:191*T,y:(GR-3)*T,w:3*T,h:T,vx:0,vy:.85,x0:191*T,y0:(GR-3)*T,range:2*T},
+    {x:205*T,y:(GR-5)*T,w:3*T,h:T,vx:0,vy:-.85,x0:205*T,y0:(GR-5)*T,range:2*T},
+  ];
   coinsDone={}; brokenQ={}; scoreSubmitted=false;
+  pipeTimers=PIPE_DEFS.map(()=>300+Math.floor(Math.random()*400));
+  pipeWarn=PIPE_DEFS.map(()=>0);
   camX=0; camY=0; tick=0;
   shakeX=0; shakeY=0; bossWarn=0; bossIntroT=0; bossDefeatT=0; hudPulse=0;
+  checkpointX=0; checkpointActivated=false; checkpointBig=false; checkpointFire=false;
   gameStartTime=Date.now(); clearTimeMs=0;
   if(savedProgress){ loadProgressIntoPlayer(); savedProgress=null; }
 }
@@ -602,7 +698,7 @@ document.addEventListener('keydown',e=>{
   // フルスクリーン閲覧中はどのキーでも閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
-  // クリア後は結果画面で止める
+  else if(gameState==='win'){ gameState='title'; }
 });
 document.addEventListener('keyup',e=>keys[e.code]=false);
 canvas.addEventListener('click',e=>{
@@ -610,7 +706,7 @@ canvas.addEventListener('click',e=>{
   // フルスクリーン閲覧中はクリックで閉じる
   if(unusedPhotoViewing){ unusedPhotoViewing=null; return; }
   if(gameState==='title'||gameState==='gameover'){ resetGame(); gameState='play'; }
-  else // クリア後は結果画面で止める
+  else if(gameState==='win'){ gameState='title'; }
 });
 
 const key = c => !!keys[c];
@@ -626,7 +722,7 @@ function bindTouchButton(id, code){
     if(gameState==='title'||gameState==='gameover'){
       resetGame(); gameState='play';
     } else if(gameState==='win'){
-      // クリア後は結果画面で止める
+      gameState='title';
     }
   };
   const off=e=>{
@@ -661,7 +757,7 @@ function setupVirtualStick(){
     if(gameState==='title'||gameState==='gameover'){
       resetGame(); gameState='play';
     } else if(gameState==='win'){
-      // クリア後は結果画面で止める
+      gameState='title';
     }
 
     const r=area.getBoundingClientRect();
@@ -756,10 +852,47 @@ function movePlayer(){
     const ta=getTile(x0,ty), tb=getTile(x1,ty);
     if(isSolid(ta)||isSolid(tb)){
       if(ta===SPIKE||tb===SPIKE){ hurtPlayer(); return; }
-      p.y=ty*T-ph; p.vy=0; p.onGround=true;
+      p.y=ty*T-ph;
+      if(ta===SPRING||tb===SPRING){
+        p.vy=-15; p.djumpUsed=false;
+        sndSpring(); shakeX=3; shakeY=2;
+        addParts(p.x+p.w/2,p.y+ph,'#ffdd00',14);
+        addParts(p.x+p.w/2,p.y+ph,'#ff8800',8);
+        spawnFloat(p.x+p.w/2,p.y,'BOING!','#ffdd00');
+      } else { p.vy=0; p.onGround=true; }
     }
   }
   // Rise
+  // ミニ・磁石・コンボタイマー
+  if(p.miniT>0){ p.miniT--; if(!p.miniT){ p.mini=false; p.w=p.big?14:12; p.h=p.big?22:16; } }
+  if(p.magnetT>0){
+    p.magnetT--;
+    if(!p.magnetT) p.magnet=false;
+    // コインアイテムを引き寄せる
+    items.forEach(it=>{
+      if(it.collected||it.type!=='coin') return;
+      const dx=p.x+p.w/2-(it.x+7), dy=p.y+p.h/2-(it.y+7);
+      const dist=Math.sqrt(dx*dx+dy*dy);
+      if(dist<120){ it.x+=dx*.12; it.y+=dy*.12; }
+    });
+    // コインタイル: 半径内を自動回収
+    const mx0=Math.floor((p.x-120)/T), mx1=Math.floor((p.x+120)/T);
+    const my0=Math.floor((p.y-120)/T), my1=Math.floor((p.y+120)/T);
+    for(let ty=my0;ty<=my1;ty++) for(let tx=mx0;tx<=mx1;tx++){
+      if(getTile(tx,ty)===COIN){
+        const k=`${tx},${ty}`;
+        if(!coinsDone[k]){ coinsDone[k]=true; p.coins++; p.score+=100; addParts(tx*T+8,ty*T,'#ffd700',4); }
+      }
+    }
+  }
+  if(p.comboT>0){ p.comboT--; if(!p.comboT) p.combo=0; }
+  // 水中泡エフェクト
+  if(p.inWater){
+    p.swimT=(p.swimT||0)+1;
+    if(p.swimT%12===0){
+      parts.push({x:p.x+4+Math.random()*8,y:p.y+4,vx:(Math.random()-.5)*.5,vy:-1,life:18,sz:2,col:'rgba(200,235,255,.75)'});
+    }
+  } else { p.swimT=0; }
   if(p.vy<0){
     const ty=Math.floor(p.y/T);
     const ta=getTile(x0,ty), tb=getTile(x1,ty);
@@ -780,16 +913,31 @@ function movePlayer(){
   });
   if(p.x<0) p.x=0;
   // 溝死亡：全部の溝で一貫してGR+4px落下でダメージ
-  if(p.y > GR*T+4 && !isSolid(getTile(Math.floor((p.x+p.w/2)/T), GR))) hurtPlayer();
+  {
+    const cx=Math.floor((p.x+p.w/2)/T);
+    const cy=Math.floor((p.y+p.h/2)/T);
+    const inWaterNow=(getTile(cx,cy)===WATER || getTile(cx,Math.floor((p.y+p.h-1)/T))===WATER);
+    // 水中では落下死させない。水エリア最下部まで沈んだ時だけ軽く戻す。
+    if(inWaterNow){
+      if(p.y > (LH-2)*T){
+        p.y=(GR-1)*T;
+        p.vy=-3;
+        p.invT=60;
+        spawnFloat(p.x+p.w/2,p.y-8,'ぷはっ','#9ee7ff');
+      }
+    } else if(p.y > GR*T+4 && !isSolid(getTile(cx, GR))){
+      hurtPlayer();
+    }
+  }
 }
 
 function hitBlock(tx,ty){
   const id=getTile(tx,ty);
   if(id===BRICK){
-    if(player.big){
+    if(player.big && !player.mini){
       brokenQ[`${tx},${ty}`]=true; setTile(tx,ty,AIR);
       addParts(tx*T+8,ty*T+8,'#c84b0a',8); player.score+=50; sndBreak();
-    } else { shakeX=2; shakeY=2; }
+    } else { shakeX=2; shakeY=2; sndHurt(); }
   } else if(id===QBLK){
     const k=`${tx},${ty}`;
     if(!brokenQ[k]){
@@ -811,8 +959,10 @@ function spawnItem(tx,ty,type){
 }
 
 function hurtPlayer(){
+  if(player.mini){ player.mini=false; player.miniT=0; player.dead=true; player.deadT=90; sndHurt(); return; }
   if(player.invT>0) return;
   if(player.fire){ player.fire=false; player.invT=120; sndHurt(); return; } // fire→big
+  if(player.cape){ player.cape=false; player.capeT=0; player.invT=120; sndHurt(); return; } // cape loss
   if(player.big){ player.big=false; player.invT=120; sndHurt(); }
   else {
     player.dead=true; player.vy=-8; player.vx=0; player.deadT=120;
@@ -851,9 +1001,18 @@ function update(){
     if(p.deadT<=0){
       if(p.hp<=0){ submitScore(); gameState='gameover'; return; }
       p.dead=false;
-      p.x=findSafeRespawnX(Math.max(16,camX+32));
-      p.y=(GR-2)*T;
-      p.vx=0; p.vy=0; p.big=false; p.fire=false; p.invT=120; p.groundPound=false;
+      if(checkpointActivated){
+        p.x=checkpointX; p.y=(GR-2)*T;
+        p.big=checkpointBig; p.fire=checkpointFire;
+        spawnFloat(p.x,p.y-10,'復活!','#00ff88');
+      } else {
+        p.x=findSafeRespawnX(Math.max(16,camX+32));
+        p.y=(GR-2)*T;
+        p.big=false; p.fire=false;
+      }
+      p.vx=0; p.vy=0; p.mini=false; p.miniT=0;
+      p.magnet=false; p.magnetT=0; p.hammerT=0;
+      p.invT=120; p.groundPound=false; p.combo=0; p.comboT=0;
     }
     updateCamera(); return;
   }
@@ -871,10 +1030,87 @@ function update(){
   if(right) { p.vx+=accel*(0.75+Math.abs(stickPowerX)*0.45); p.facing= 1; }
   if(!left&&!right) p.vx*=fric;
   p.vx=Math.max(-RUN_SPD,Math.min(RUN_SPD,p.vx));
-  p.vy=Math.min(13, p.vy+GRAVITY);
+  // 水中判定
+  {
+    const wTx=Math.floor((p.x+p.w/2)/T);
+    const wTyMid=Math.floor((p.y+p.h*.55)/T);
+    const wTyFoot=Math.floor((p.y+p.h-1)/T);
+    p.inWater=(getTile(wTx,wTyMid)===WATER || getTile(wTx,wTyFoot)===WATER);
+  }
+  if(p.inWater){
+    p.vy=Math.min(2.5, p.vy+GRAVITY*.12);  // 水中:重力弱、ゆっくり沈む
+    p.vx*=.82;
+    p.onGround=false;
+    p.djumpUsed=false;
+  } else {
+    p.vy=Math.min(13, p.vy+GRAVITY);
+  }
 
-  if(jump && p.onGround && !p.jumpHeld){ p.vy=JUMP_V; p.jumpHeld=true; sndJump(); }
+  if(p.inWater){
+    if(jump && !p.jumpHeld){ p.vy=-3.8; p.jumpHeld=true; sndJump(); }  // 水中泳ぎ
+    if(!jump) p.jumpHeld=false;
+  } else {
+    if(jump && p.onGround && !p.jumpHeld){ p.vy=JUMP_V*(p.mini?1.4:1); p.jumpHeld=true; p.djumpUsed=false; sndJump(); }
+  }
+  if(jump && !p.onGround && !p.jumpHeld && p.djump && !p.djumpUsed){
+    p.vy=JUMP_V*.85; p.djumpUsed=true; p.jumpHeld=true;
+    sndJump(); addParts(p.x+p.w/2,p.y+p.h/2,'#88ff44',12);
+    spawnFloat(p.x+p.w/2,p.y,'2段ジャンプ!','#88ff44');
+  }
+  // 壁キック判定
+  if(!p.onGround && !p.groundPound){
+    const wdir=left?-1:right?1:p.wallDir||0;
+    if(wdir!==0){
+      const wtx=Math.floor((wdir>0?p.x+p.w:p.x-2)/T);
+      const wty=Math.floor((p.y+p.h/2)/T);
+      const onWall=isSolid(getTile(wtx,Math.floor(p.y/T)))||isSolid(getTile(wtx,wty));
+      if(onWall){ p.wallT=Math.min(p.wallT+1,10); p.wallDir=wdir; }
+      else p.wallT=Math.max(0,p.wallT-1);
+    } else p.wallT=Math.max(0,p.wallT-1);
+    if(jump && !p.jumpHeld && p.wallT>=3){
+      p.vy=JUMP_V*.88; p.vx=-p.wallDir*RUN_SPD*1.4; p.facing=-p.wallDir;
+      p.jumpHeld=true; p.wallT=0; p.djumpUsed=false;
+      sndJump(); addParts(p.x+p.w/2,p.y+p.h/2,'#aaccff',14);
+      spawnFloat(p.x+p.w/2,p.y,'壁キック!','#aaccff');
+    }
+  } else if(p.onGround){ p.wallT=0; }
   if(!jump){ p.jumpHeld=false; if(p.vy<-3) p.vy+=.9; }
+  if(p.onGround) p.djumpUsed=false;
+
+  // マント飛行：空中でJUMP長押しするとゆっくり落ちる
+  if(p.cape){
+    if(p.capeT>0) p.capeT--;
+    if(p.capeT<=0){ p.cape=false; p.glide=false; }
+    p.glide = jump && !p.onGround && p.vy>0;
+    if(p.glide){
+      p.vy=Math.min(p.vy,1.15);
+      p.vx+=p.facing*0.035;
+      if(tick%6===0) addParts(p.x+p.w/2,p.y+p.h/2,'#e0b06a',2);
+    }
+  }
+  if(p.spinCD>0) p.spinCD--;
+  if(p.spinT>0){
+    p.spinT--;
+    const sx=p.x-12, sy=p.y-6, sw=p.w+24, sh=p.h+12;
+    enemies.forEach(e=>{
+      if(!e.alive||e.stomp>0) return;
+      if(overlap(sx,sy,sw,sh,e.x,e.y,e.w,e.h)){
+        e.stomp=18; e.vy=-4; e.vx=p.facing*3;
+        p.score+=300; addParts(e.x+7,e.y+6,'#ffd080',16);
+        spawnFloat(e.x+7,e.y,'SPIN!','#ffd080'); sndEnemyDie();
+      }
+    });
+    if(boss && boss.alive && boss.active && overlap(sx,sy,sw,sh,boss.x,boss.y,boss.w,boss.h) && tick%8===0){
+      boss.hp-=0.25; boss.hitT=12; shakeX=2; shakeY=2;
+      addParts(p.x+p.w/2,p.y+p.h/2,'#ffd080',8);
+      if(boss.hp<=0){
+        boss.alive=false; boss._dieX=boss.x; boss._dieY=boss.y;
+        addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ff4400',30);
+        addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ffd700',20);
+        spawnFloat(boss.x+boss.w/2,boss.y,'5000','#ffee00'); p.score+=5000; shakeX=10; shakeY=10;
+      }
+    }
+  }
 
   // グラウンドパウンド：空中で↓を押すと急降下
   if(down && !p.onGround && !p.groundPound && p.vy<4){
@@ -910,12 +1146,19 @@ function update(){
     p.fireCD=15; p.fireHeld=true; sndFireShoot();
   }
 
+  // マントくるくる攻撃：🔥ボタンで発動。空中でも地上でも使える
+  if(key('KeyZ') && p.cape && p.spinCD===0 && !p.dead && !p.fireHeld){
+    p.spinT=22; p.spinCD=36; p.fireHeld=true;
+    sndSpin();
+    addParts(p.x+p.w/2,p.y+p.h/2,'#ffd080',14);
+  }
+
   movePlayer();
 
   // グラウンドパウンド着地：ブロック・？ブロック・コイン全部対象
   if(p.groundPound && p.onGround){
     shakeX=5; shakeY=5; sndBreak();
-    const ph=p.big?20:16;
+    const ph=p.mini?8:(p.big?20:16); if(p.mini){p.w=8;p.h=8;} else if(!p.big){p.w=12;p.h=16;}
     const tyB=Math.floor((p.y+ph)/T);
     const tx0=Math.floor(p.x/T), tx1=Math.floor((p.x+p.w-1)/T);
     [tx0,tx1,tx0-1,tx1+1].forEach(tx=>{  // 左右1マスも対象
@@ -940,6 +1183,41 @@ function update(){
   if(p.invT>0) p.invT--;
   if(p.growT>0) p.growT--;
   p.animT++;
+
+  // ── ハンマー振り ──────────────────────────────────────
+  if(p.hammerT>0){
+    p.hammerT--;
+    if(p.hammerT%6===0){
+      const hx=p.facing>0?p.x+p.w-2:p.x-18;
+      enemies.forEach(e=>{
+        if(!e.alive||e.stomp>0) return;
+        if(overlap(hx,p.y,20,p.h+4,e.x,e.y,e.w,e.h)){
+          e.stomp=18; e.vy=-4; e.vx=p.facing*2;
+          p.score+=500; addParts(e.x+7,e.y,'#ffcc00',12);
+          spawnFloat(e.x+7,e.y,'500','#ffcc00'); sndHammer();
+        }
+      });
+      if(boss.alive&&boss.active&&overlap(hx,p.y,20,p.h+4,boss.x,boss.y,boss.w,boss.h)){
+        boss.hp--; boss.hitT=40; shakeX=5; shakeY=5;
+        spawnFloat(boss.x+boss.w/2,boss.y-8,'🔨HAMMER!','#ffcc00');
+        addParts(boss.x+boss.w/2,boss.y,'#ff8800',16);
+        sndHammer(); sndBossHit();
+        if(boss.hp<=0){ boss.alive=false; boss._dieX=boss.x; boss._dieY=boss.y;
+          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ff4400',30);
+          addParts(boss.x+boss.w/2,boss.y+boss.h/2,'#ffd700',20);
+          spawnFloat(boss.x+boss.w/2,boss.y,'5000','#ffee00'); p.score+=5000; shakeX=10; shakeY=10;
+        }
+      }
+      for(let bi=barrels.length-1;bi>=0;bi--){
+        const br=barrels[bi];
+        if(!br.alive) continue;
+        if(overlap(hx,p.y,20,p.h+4,br.x,br.y,br.w,br.h)){
+          br.alive=false; addParts(br.x+7,br.y+7,'#c84b0a',12);
+          p.score+=200; spawnFloat(br.x+7,br.y,'200','#ffcc00'); sndHammer();
+        }
+      }
+    }
+  }
 
   // 5000点ごとに1UP
   while(p.score >= p.nextLifeScore){
@@ -992,8 +1270,35 @@ function update(){
         sndItem();
       }
       if(it.type==='star'){ p.invT=300; p.score+=1000; sndItem(); addParts(it.x+7,it.y+7,'#ffd700',12); }
+      if(it.type==='djump'){
+        p.djump=true; p.score+=1000; sndItem();
+        addParts(it.x+7,it.y+7,'#88ff44',20); addParts(it.x+7,it.y+7,'#fff',10);
+        spawnFloat(it.x+7,it.y,'2段ジャンプ!','#88ff44');
+      }
+      if(it.type==='cape'){ ctx.fillStyle='#c98b3c'; ctx.fillRect(x+2,y+3,10,9); ctx.fillStyle='#fff2aa'; ctx.fillRect(x+4,y+5,6,2); ctx.fillStyle='#7a3b12'; ctx.fillRect(x+1,y+4,2,8); }
+    if(it.type==='hammer'){
+        p.hammerT=400; p.score+=1000; sndHammer();
+        addParts(it.x+7,it.y+7,'#ff8800',20); addParts(it.x+7,it.y+7,'#ffee00',14);
+        spawnFloat(it.x+7,it.y,'HAMMER!!','#ffcc00');
+      }
+      if(it.type==='cape'){
+        p.cape=true; p.capeT=900; p.score+=1000; sndCape();
+        addParts(it.x+7,it.y+7,'#d8a15a',22); addParts(it.x+7,it.y+7,'#fff2aa',12);
+        spawnFloat(it.x+7,it.y,'マント!','#ffd080');
+      }
       if(it.type==='ice'){ p.iceReady=Math.min(5,p.iceReady+3); p.score+=1000; sndFreeze(); addParts(it.x+7,it.y+7,'#88ddff',18); addParts(it.x+7,it.y+7,'#fff',10); }
-      spawnFloat(it.x+7,it.y,'1000','#fff');
+      if(it.type==='mini'){
+        p.mini=true; p.miniT=600; p.big=false; p.fire=false;
+        p.w=8; p.h=8; p.score+=1000; sndItem();
+        addParts(it.x+7,it.y+7,'#ff88cc',20); addParts(it.x+7,it.y+7,'#fff',10);
+        spawnFloat(it.x+7,it.y,'ミニ!','#ff88cc');
+      }
+      if(it.type==='magnet'){
+        p.magnet=true; p.magnetT=480; p.score+=1000; sndItem();
+        addParts(it.x+7,it.y+7,'#ff4488',20); addParts(it.x+7,it.y+7,'#ffd700',14);
+        spawnFloat(it.x+7,it.y,'磁石コイン!','#ffd700');
+      }
+      if(it.type!=='mini'&&it.type!=='magnet') spawnFloat(it.x+7,it.y,'1000','#fff');
     }
   });
 
@@ -1017,16 +1322,26 @@ function update(){
     const ex0=Math.floor(e.x/T),ex1=Math.floor((e.x+e.w-1)/T);
     const eyB=Math.floor((e.y+e.h)/T);
     if(isSolid(getTile(ex0,eyB))||isSolid(getTile(ex1,eyB))){ e.y=eyB*T-e.h; e.vy=0; }
-    if(isSolid(getTile(ex0,Math.floor(e.y/T)))){ e.vx*=-1; }
-    if(isSolid(getTile(ex1+1,eyB-1))){ e.vx*=-1; }
-    if(!isSolid(getTile(ex0,eyB+1))&&e.vx<0) e.vx*=-1;
-    if(!isSolid(getTile(ex1,eyB+1))&&e.vx>0) e.vx*=-1;
+    // 壁・端の反転（同フレームで複数回反転しないよう1回のみ）
+    {
+      let flipped=false;
+      if(!flipped && isSolid(getTile(ex0,Math.floor(e.y/T)))&&e.vx<0){ e.vx=Math.abs(e.vx); flipped=true; }
+      if(!flipped && isSolid(getTile(ex1+1,eyB-1))&&e.vx>0){ e.vx=-Math.abs(e.vx); flipped=true; }
+      if(!flipped && !isSolid(getTile(ex0,eyB+1))&&e.vx<0){ e.vx=Math.abs(e.vx); flipped=true; }
+      if(!flipped && !isSolid(getTile(ex1,eyB+1))&&e.vx>0){ e.vx=-Math.abs(e.vx); flipped=true; }
+      // 最低速度保証（ゼロ速度で固まらないように）
+      if(Math.abs(e.vx)<0.4) e.vx=e.vx>=0?0.8:-0.8;
+    }
     if(e.x<0||e.x>LW*T) e.alive=false;
     if(p.invT===0 && overlap(p.x,p.y,p.w,p.h,e.x,e.y,e.w,e.h)){
       if(p.vy>0 && p.y+p.h < e.y+e.h*.55){
         e.stomp=18; e.vy=0; e.vx=0;
-        p.vy=-7; p.score+=200; sndStomp(); sndEnemyDie();
-        spawnFloat(e.x+7,e.y,'200','#ff8');
+        p.combo++; p.comboT=90;
+        const _cmul=Math.pow(2,Math.min(p.combo-1,5));
+        const _cscore=200*_cmul;
+        p.vy=-7+(p.mini?-2:0); p.score+=_cscore; sndStomp(); sndEnemyDie();
+        if(p.combo>1) spawnFloat(e.x+7,e.y,`${p.combo}コンボ! ×${_cmul}`,'#ff9900');
+        else spawnFloat(e.x+7,e.y,'200','#ff8');
         addParts(e.x+7,e.y+6,'#ff4400',6);
       } else { hurtPlayer(); }
     }
@@ -1059,6 +1374,99 @@ function update(){
       }
     });
     if(hitSomething){ thrownEnemies.splice(i,1); }
+  }
+
+
+  // ── チェックポイント ─────────────────────────────────────
+  {
+    const cpX=118*T;
+    if(!checkpointActivated && p.x > cpX){
+      checkpointActivated=true;
+      checkpointX=cpX+8;
+      checkpointBig=p.big; checkpointFire=p.fire;
+      spawnFloat(cpX+8,((GR-5)*T),'チェックポイント!','#00ff88');
+      addParts(cpX+8,(GR-1)*T,'#00ff88',20); addParts(cpX+8,(GR-1)*T,'#ffdd00',14);
+      tone(880,.06,'square',.12); tone(1100,.05,'square',.10,.07); tone(1320,.06,'square',.10,.13);
+      shakeX=4; shakeY=4;
+    }
+  }
+
+  // ── パイプから敵スポーン ──────────────────────────────
+  PIPE_DEFS.forEach((pd,i)=>{
+    // プレイヤーが遠すぎる場合はスキップ（画面外に溜めない）
+    if(Math.abs(pd.x - p.x) > 600) return;
+    if(pipeWarn[i]>0){
+      pipeWarn[i]--;
+      if(pipeWarn[i]===0){
+        // 飛び出し！
+        const dir=p.x>pd.x?1:-1;
+        enemies.push({
+          x:pd.x-7, y:pd.pipeTopY-14,
+          vx:dir*1.0, vy:-3.5,
+          w:14, h:12, alive:true, stomp:0, animT:0,
+          frozen:0, carried:false, fromPipe:true
+        });
+        sndPipePop();
+        shakeX=4; shakeY=4;
+        addParts(pd.x,pd.pipeTopY,'#88ff44',12);
+        addParts(pd.x,pd.pipeTopY,'#ffffff',8);
+        pipeTimers[i]=350+Math.floor(Math.random()*450);
+      }
+      return;
+    }
+    pipeTimers[i]--;
+    if(pipeTimers[i]<=0){
+      pipeWarn[i]=70; // 「！」警告フレーム
+      tone(1200,.03,'square',.12); tone(1600,.04,'square',.10,.03);
+    }
+  });
+
+
+  // ── 動く足場 ──────────────────────────────────────────────────
+  movPlats.forEach(mp=>{
+    if(mp.vx){ mp.x+=mp.vx; if(Math.abs(mp.x-mp.x0)>mp.range){ mp.vx*=-1; mp.x=mp.x0+mp.range*Math.sign(mp.x-mp.x0); } }
+    if(mp.vy){ mp.y+=mp.vy; if(Math.abs(mp.y-mp.y0)>mp.range){ mp.vy*=-1; mp.y=mp.y0+mp.range*Math.sign(mp.y-mp.y0); } }
+    if(!p.dead && p.vy>=0){
+      if(p.x+p.w-3>mp.x && p.x+3<mp.x+mp.w &&
+         p.y+p.h>=mp.y && p.y+p.h<=mp.y+mp.h+Math.abs(p.vy)+6){
+        p.y=mp.y-p.h; p.vy=0; p.onGround=true; p.djumpUsed=false; p.wallT=0;
+        p.x+=mp.vx;
+        if(mp.vy<0) p.y+=mp.vy; // 上昇時も追随
+      }
+    }
+  });
+
+  // ── タル転がし（ドンキーコング風） ─────────────────────
+  for(let i=barrels.length-1;i>=0;i--){
+    const br=barrels[i];
+    if(!br.alive){ barrels.splice(i,1); continue; }
+    br.animT++;
+    br.vy=Math.min(10,br.vy+GRAVITY*.7);
+    br.x+=br.vx; br.y+=br.vy;
+    const brx0=Math.floor(br.x/T),brx1=Math.floor((br.x+br.w-1)/T);
+    const bryB=Math.floor((br.y+br.h)/T);
+    if(isSolid(getTile(brx0,bryB))||isSolid(getTile(brx1,bryB))){
+      br.y=bryB*T-br.h; br.vy=0;
+      if(getTile(brx0,bryB)===SPRING||getTile(brx1,bryB)===SPRING) br.vy=-9;
+    }
+    const wallT=getTile(Math.floor((br.x+(br.vx>0?br.w:0))/T),Math.floor((br.y+br.h*.5)/T));
+    if(isSolid(wallT)){ br.vx*=-0.85; sndBarrel(); }
+    br.life=(br.life||380)-1;
+    if(br.life<=0||br.y>(GR+3)*T){ barrels.splice(i,1); continue; }
+    if(p.invT===0&&overlap(p.x,p.y,p.w,p.h,br.x,br.y,br.w,br.h)){
+      if(p.vy>0&&p.y+p.h<br.y+br.h*.6){
+        br.alive=false; p.vy=-7; p.score+=300;
+        spawnFloat(br.x+7,br.y,'300','#ffdd00');
+        addParts(br.x+7,br.y+7,'#c84b0a',12); sndStomp();
+      } else { hurtPlayer(); }
+    }
+    for(let j=fireballs.length-1;j>=0;j--){
+      if(overlap(fireballs[j].x,fireballs[j].y,8,8,br.x,br.y,br.w,br.h)){
+        br.alive=false; addParts(br.x+7,br.y+7,'#ff4400',12);
+        p.score+=200; spawnFloat(br.x+7,br.y,'200','#ff8800');
+        fireballs.splice(j,1); break;
+      }
+    }
   }
 
   // Boss
@@ -1178,7 +1586,7 @@ function update(){
   if(!boss.alive){
     bossWarn=0;
     boss._deadTimer=(boss._deadTimer||0)+1;
-    if(boss._deadTimer===1){ sndWin(); stopBGM(); bossDefeatT=180; clearTimeMs=Date.now()-gameStartTime; if(!bestClearTime || clearTimeMs<bestClearTime){ bestClearTime=clearTimeMs; localStorage.setItem('crabBestClearTime',String(bestClearTime)); } clearSavedProgress(); }
+    if(boss._deadTimer===1){ sndWin(); stopBGM(); bossDefeatT=180; clearTimeMs=Date.now()-gameStartTime; lastClearIsBest=(!bestClearTime || clearTimeMs<bestClearTime); if(lastClearIsBest){ bestClearTime=clearTimeMs; localStorage.setItem('crabBestClearTime',String(bestClearTime)); } clearSavedProgress(); }
     if(boss._deadTimer>180){ submitScore(); gameState='win'; bossDefeatT=999999; }
   }
 
@@ -1199,16 +1607,42 @@ function updateBoss(){
   const bx0=Math.floor(b.x/T), bx1=Math.floor((b.x+b.w-1)/T);
   const byB=Math.floor((b.y+b.h)/T);
   const onGround = isSolid(getTile(bx0,byB))||isSolid(getTile(bx1,byB));
-  const justLanded = onGround && prevVy > 1.5; // 着地判定（閾値を上げて誤爆防止）
+  const justLanded = onGround && prevVy > 1.5;
+  // ボスの頭が天井タイルに入ったら押し下げる
+  const byT=Math.floor(b.y/T);
+  if(b.vy<0 && (isSolid(getTile(bx0,byT))||isSolid(getTile(bx1,byT)))){
+    b.y=(byT+1)*T; b.vy=Math.abs(b.vy)*.4;
+  } // 着地判定（閾値を上げて誤爆防止）
   if(onGround){ b.y=byB*T-b.h; b.vy=0; }
   // 画面外上限：ボスが上に飛び出したら跳ね返す
-  if(b.y < 8){ b.y=8; b.vy=Math.abs(b.vy)*.5; }
+  if(b.y < (GR-7)*T){ b.y=(GR-7)*T; b.vy=Math.abs(b.vy)*.4; } // 天井タイル下に固定
 
   // 壁反射
   if(b.x<158*T) b.vx=Math.abs(b.vx);
   if(b.x+b.w>LW*T-T) b.vx=-Math.abs(b.vx);
   const spd=1.2+(b.maxHp-b.hp)*.35;
   b.vx=b.vx>0?spd:-spd;
+  // フェーズ変化検知
+  const newPhase=b.hp>=7?1:b.hp>=4?2:1>=b.hp?4:3;
+  if((b._phase||1)!==newPhase){
+    b._phase=newPhase;
+    if(newPhase===2){ shakeX=8;shakeY=8; spawnFloat(b.x+b.w/2,b.y,'PHASE 2!','#ff8800'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff8800',25); tone(120,.4,'sawtooth',.35); }
+    if(newPhase===3){ shakeX=12;shakeY=12; spawnFloat(b.x+b.w/2,b.y,'ENRAGE!!','#ff2200'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff2200',35); addParts(b.x+b.w/2,b.y+b.h/2,'#ffd700',20); tone(80,.5,'sawtooth',.40); tone(90,.3,'square',.30,.15); }
+    if(newPhase===4){ shakeX=15;shakeY=15; spawnFloat(b.x+b.w/2,b.y,'LAST STAND!!','#ff0000'); addParts(b.x+b.w/2,b.y+b.h/2,'#ff0000',50); addParts(b.x+b.w/2,b.y+b.h/2,'#fff',30); tone(60,.6,'sawtooth',.45); }
+  }
+  // 泡エフェクト（HP低いほど頻繁に）
+  if(b.hp<=6 && tick%(b.hp<=2?8:b.hp<=4?15:25)===0){
+    const bx2=b.x+6+Math.random()*(b.w-12);
+    addParts(bx2,b.y,'#aaddff',3);
+    parts.push({x:bx2,y:b.y,vx:(Math.random()-.5)*.8,vy:-1.2-Math.random()*.8,life:22,sz:Math.random()<.5?2:3,col:'rgba(180,220,255,.8)'});
+  }
+  // 着地衝撃波（HP低い時）
+  if(justLanded && b.hp<=5){
+    shakeX=5+Math.max(0,3-b.hp); shakeY=5+Math.max(0,3-b.hp);
+    addParts(b.x+b.w/2,(byB)*T,'#ff8800',12+b.hp);
+    projs.push({x:b.x-20,y:byB*T-6,vx:-3.5,vy:0,w:16,h:6,life:20});
+    projs.push({x:b.x+b.w+4,y:byB*T-6,vx:3.5,vy:0,w:16,h:6,life:20});
+  }
 
   const p=player;
 
@@ -1257,6 +1691,16 @@ function updateBoss(){
       else if(r<0.4){ b.vx=-b.vx; }             // 反転
       b.actT=55+Math.floor(Math.random()*25);
     }
+  }
+
+  // ── タル投げ ──────────────────────────────────────────
+  if(b.barrelT>0) b.barrelT--;
+  if(b.barrelT===0 && onGround && b.hp<=5){
+    const dir=p.x<b.x?-1:1;
+    barrels.push({x:b.x+(dir<0?0:b.w-14),y:b.y+b.h-14,vx:dir*2.8,vy:-1.5,w:14,h:14,alive:true,animT:0,life:400});
+    sndBarrel(); addParts(b.x+b.w/2,b.y+b.h*.5,'#c84b0a',8);
+    const iv=b.hp<=2?130:b.hp<=4?210:290;
+    b.barrelT=iv+Math.floor(Math.random()*110);
   }
 
   // 地上でたまにランダム反転（フェーズ問わず）
@@ -1360,6 +1804,44 @@ function drawTile(id,sx,sy,tx,ty){
     ctx.fillStyle='#7a2a9a'; ctx.fillRect(sx,sy,T,2);
     ctx.fillStyle='#3a0a5a'; ctx.fillRect(sx,sy+T-2,T,2);
     ctx.fillStyle='#6a1a8a'; ctx.fillRect(sx+(tx%2?0:8),sy+5,8,1); ctx.fillRect(sx,sy+T/2,T,1);
+  } else if(id===SPRING){
+    const comp=Math.sin(tick*.22+sx*.1)*.5+.5;
+    ctx.fillStyle='#666'; ctx.fillRect(sx+3,sy+T-4,10,4);
+    ctx.fillStyle='#999'; ctx.fillRect(sx+4,sy+T-3,8,2);
+    const ch=Math.floor(5+comp*3);
+    ctx.fillStyle='#ffcc00';
+    for(let ci=0;ci<3;ci++) ctx.fillRect(sx+3,sy+T-5-ch+ci*Math.ceil(ch/3),10,2);
+    ctx.fillStyle='#ff8800'; ctx.fillRect(sx+4,sy+T-5-ch-2,8,3);
+    ctx.fillStyle='#ffe066'; ctx.fillRect(sx+5,sy+T-5-ch-1,4,2);
+  } else if(id===WATER){
+    // 水タイル（半透明ブルー）
+    const wdepth=(ty-GR); // 深さ（0=水面）
+    const alpha=0.55+wdepth*.06;
+    ctx.fillStyle=`rgba(30,120,220,${Math.min(.85,alpha)})`;
+    ctx.fillRect(sx,sy,T,T);
+    if(ty===GR){ // 水面
+      ctx.fillStyle=`rgba(120,200,255,${.45+Math.sin(tick*.08+sx*.05)*.12})`;
+      ctx.fillRect(sx,sy,T,4);
+      ctx.fillStyle='rgba(200,240,255,.25)';
+      ctx.fillRect(sx+2,sy+1,T-4,2);
+    }
+    // 水中の光の揺らぎ
+    if(tick%3===0&&Math.random()<.08){
+      ctx.fillStyle='rgba(150,220,255,.18)';
+      ctx.fillRect(sx+Math.floor(Math.random()*T),sy+Math.floor(Math.random()*T),2,3);
+    }
+  } else if(id===DASHPAD){
+    ctx.fillStyle='#222244'; ctx.fillRect(sx,sy,T,T);
+    ctx.fillStyle='#ffdd00'; ctx.fillRect(sx,sy+T-2,T,2);
+    ctx.fillStyle='rgba(255,220,0,.9)';
+    for(let di=0;di<3;di++){
+      const ax=sx+2+di*4, ay=sy+T/2-1;
+      ctx.beginPath(); ctx.moveTo(ax,ay-3); ctx.lineTo(ax+4,ay); ctx.lineTo(ax,ay+3); ctx.fill();
+      ctx.globalAlpha=.4+di*.25;
+    }
+    ctx.globalAlpha=1;
+    ctx.strokeStyle='#ffdd00'; ctx.lineWidth=1;
+    ctx.strokeRect(sx+.5,sy+.5,T-1,T-1);
   } else if(id===SPIKE){
     ctx.fillStyle='#cc4422'; ctx.fillRect(sx,sy+T-4,T,4);
     ctx.fillStyle='#ff8866';
@@ -1419,6 +1901,27 @@ function drawPlayer(){
   if(p.dead){ ctx.translate(p.w/2,p.h/2); ctx.rotate(tick*.3); ctx.translate(-p.w/2,-p.h/2); }
   if(p.facing===-1){ ctx.translate(p.w,0); ctx.scale(-1,1); }
   const BIG=p.big;
+  // マント表示
+  if(p.cape){
+    ctx.save();
+    const flap=Math.sin(tick*.35)*2;
+    ctx.fillStyle=p.spinT>0?'#ffd080':'#c98b3c';
+    if(p.facing===1){
+      ctx.fillRect(-8,5+flap,9,p.h-4);
+      ctx.fillStyle='#fff2aa'; ctx.fillRect(-6,7+flap,5,2);
+    } else {
+      ctx.fillRect(p.w-1,5+flap,9,p.h-4);
+      ctx.fillStyle='#fff2aa'; ctx.fillRect(p.w+1,7+flap,5,2);
+    }
+    ctx.restore();
+  }
+  if(p.spinT>0){
+    ctx.strokeStyle='#ffd080';
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.ellipse(p.w/2,p.h/2,p.w+5,p.h/2+3,0,0,Math.PI*2);
+    ctx.stroke();
+  }
   const rf=p.runF;
   // Legs
   const legY=BIG?14:11;
@@ -1554,6 +2057,35 @@ function drawItem(it){
     ctx.fillStyle='#ffee00'; ctx.fillRect(sx+4,sy+3+b,6,6);
     ctx.fillStyle='#fff';    ctx.fillRect(sx+5,sy+4+b,4,4);
     ctx.fillStyle='#ffaa00'; ctx.fillRect(sx+6,sy+5+b,2,2);
+  } else if(it.type==='djump'){
+    // 2段ジャンプ靴（緑ブーツ風）
+    const db=Math.sin(it.animT*.09)*2;
+    ctx.fillStyle='#22aa22'; ctx.fillRect(sx+2,sy+2+db,10,8);
+    ctx.fillStyle='#44ff44'; ctx.fillRect(sx+3,sy+3+db,8,4);
+    ctx.fillStyle='#88ff88'; ctx.fillRect(sx+4,sy+4+db,3,2);
+    ctx.fillStyle='#11aa11'; ctx.fillRect(sx+1,sy+8+db,12,6);
+    ctx.fillStyle='#fff'; ctx.font='bold 7px monospace'; ctx.textAlign='center';
+    ctx.fillText('2↑',sx+7,sy+13+db);
+  } else if(it.type==='hammer'){
+    // ハンマー
+    const hb=Math.sin(it.animT*.09)*2;
+    ctx.fillStyle='#8b4513'; ctx.fillRect(sx+5,sy+4+hb,4,10);
+    ctx.fillStyle='#555'; ctx.fillRect(sx+1,sy+1+hb,12,6);
+    ctx.fillStyle='#888'; ctx.fillRect(sx+2,sy+2+hb,10,3);
+    ctx.fillStyle='#ccc'; ctx.fillRect(sx+3,sy+2+hb,3,2);
+  } else if(it.type==='mini'){
+    // ミニキノコ（ピンク色の小さいキノコ）
+    ctx.fillStyle='#ff88cc'; ctx.fillRect(sx+2,sy+7,10,7);
+    ctx.fillStyle='#ff44aa'; ctx.beginPath(); ctx.arc(sx+7,sy+7,7,Math.PI,0,false); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.fillRect(sx+4,sy+4,3,3); ctx.fillRect(sx+9,sy+5,2,2);
+    ctx.fillStyle='#ff88cc'; ctx.fillRect(sx+5,sy+7,1,1);
+  } else if(it.type==='magnet'){
+    // 磁石アイテム（赤と青の蹄鉄型）
+    ctx.fillStyle='#ff3333'; ctx.fillRect(sx+2,sy+3,4,8); ctx.fillRect(sx+2,sy+3,10,4);
+    ctx.fillStyle='#3366ff'; ctx.fillRect(sx+8,sy+3,4,8);
+    ctx.fillStyle='#ffcc00'; ctx.fillRect(sx+3,sy+11,3,3); ctx.fillRect(sx+8,sy+11,3,3);
+    // スパーク
+    if(it.animT%6<3){ ctx.fillStyle='#ffff44'; ctx.fillRect(sx+6,sy,2,3); ctx.fillRect(sx+1,sy+5,3,2); ctx.fillRect(sx+10,sy+5,3,2); }
   } else if(it.type==='ice'){
     // 氷の結晶
     const ic=Math.floor(it.animT/5)%2;
@@ -1589,6 +2121,77 @@ function drawThrownEnemy(te){
   ctx.strokeStyle='#66bbff'; ctx.lineWidth=1; ctx.strokeRect(sx,sy,te.w,te.h);
 }
 
+function drawMovPlat(mp){
+  const sx=Math.round(mp.x-camX+shakeX), sy=Math.round(mp.y-camY+shakeY);
+  const pw=mp.w;
+  // 本体
+  ctx.fillStyle='#7a5230'; ctx.fillRect(sx,sy,pw,T);
+  ctx.fillStyle='#c07040'; ctx.fillRect(sx,sy,pw,3);
+  ctx.fillStyle='#5a3820'; ctx.fillRect(sx,sy+T-3,pw,3);
+  // 節目
+  for(let i=1;i<Math.floor(pw/T);i++){
+    ctx.fillStyle='rgba(0,0,0,.18)'; ctx.fillRect(sx+i*T,sy+3,1,T-6);
+  }
+  // 矢印インジケーター（方向）
+  ctx.fillStyle='rgba(255,230,60,.85)'; ctx.font='bold 7px monospace';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  const icon=mp.vx?(mp.vx>0?'→':'←'):(mp.vy>0?'↓':'↑');
+  ctx.fillText(icon,sx+pw/2,sy+T/2+1);
+}
+
+function drawCheckpoint(){
+  const cpX=118*T, cpY=GR*T;
+  const sx=Math.round(cpX-camX+shakeX), sy=Math.round(cpY-camY+shakeY);
+  const poleH=40;
+  // 竿
+  ctx.fillStyle='#cccccc'; ctx.fillRect(sx,sy-poleH,3,poleH);
+  ctx.fillStyle='#ffee00'; ctx.fillRect(sx-1,sy-poleH-2,5,4); // 先端
+
+  if(checkpointActivated){
+    // 活性化：大きい緑旗＋輝き
+    const wave=Math.sin(tick*.15)*3;
+    // 外枠
+    ctx.fillStyle='#007733'; ctx.fillRect(sx+3,sy-poleH+1,18+wave,16);
+    // 本体
+    ctx.fillStyle='#00cc55'; ctx.fillRect(sx+4,sy-poleH+2,16+wave,12);
+    // ハイライト
+    ctx.fillStyle='#66ff99'; ctx.fillRect(sx+5,sy-poleH+3,8,4);
+    // 星マーク
+    ctx.fillStyle='#ffee00'; ctx.font='bold 9px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+    ctx.fillText('★',sx+5,sy-poleH+5);
+    // 発光
+    if(tick%16<8){ ctx.fillStyle='rgba(0,255,136,.20)'; ctx.fillRect(sx-6,sy-poleH-6,32,poleH+10); }
+    // 上部ラベル「ここから復活」
+    ctx.fillStyle='rgba(0,0,0,.55)'; ctx.fillRect(sx-14,sy-poleH-18,44,12);
+    ctx.fillStyle='#00ff88'; ctx.font='bold 6px monospace'; ctx.textAlign='center';
+    ctx.fillText('ここから復活!',sx+8,sy-poleH-14);
+  } else {
+    // 未活性化：白旗＋「セーブ地点」ラベル
+    ctx.fillStyle='#aaaaaa'; ctx.fillRect(sx+3,sy-poleH+1,16,14);
+    ctx.fillStyle='#dddddd'; ctx.fillRect(sx+4,sy-poleH+2,14,10);
+    ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(sx-14,sy-poleH-18,44,12);
+    ctx.fillStyle='#fff'; ctx.font='bold 6px monospace'; ctx.textAlign='center';
+    ctx.fillText('セーブ地点',sx+8,sy-poleH-14);
+    // 矢印「通り過ぎると発動」
+    const arrowBob=Math.floor(tick*.05)%2;
+    ctx.fillStyle='#ffee00'; ctx.font='10px monospace';
+    ctx.fillText('→',sx-10,sy-poleH+4+arrowBob);
+  }
+  // 土台
+  ctx.fillStyle='#888'; ctx.fillRect(sx-3,sy-4,8,4);
+}
+
+function drawBarrel(br){
+  const sx=Math.round(br.x-camX+shakeX), sy=Math.round(br.y-camY+shakeY);
+  const rot=Math.floor(br.animT*.18)%4;
+  ctx.fillStyle='#7a3510'; ctx.fillRect(sx,sy,br.w,br.h);
+  ctx.fillStyle='#a05020'; ctx.fillRect(sx+1,sy+1,br.w-2,4);
+  ctx.fillStyle='#c8a000'; ctx.fillRect(sx,sy+3,br.w,2); ctx.fillRect(sx,sy+br.h-5,br.w,2);
+  const lx=rot%2===0?3:8;
+  ctx.fillStyle='#4a1800'; ctx.fillRect(sx+lx,sy+5,2,br.h-10);
+  ctx.fillStyle='rgba(255,200,130,.3)'; ctx.fillRect(sx+1,sy+5,3,br.h-10);
+}
+
 // Boss (Big Red Crab)
 function drawBoss(){
   const b=boss;
@@ -1621,12 +2224,21 @@ function drawBoss(){
     return;
   }
   const sx=Math.round(b.x-camX+shakeX), sy=Math.round(b.y-camY+shakeY);
-  const rage=b.hp<=2;
+  // HPによる段階カラー
+  const hpR=b.hp/b.maxHp;
+  const phase=b._phase||1;
+  const rage=phase>=3;
   const flash=b.hitT>0 && Math.floor(b.hitT/5)%2;
+  // フェーズ2+: 発光グロー
+  if(phase>=2 && !flash){
+    const glowAlpha=phase>=3?(.18+Math.sin(tick*.14)*.1):(.08+Math.sin(tick*.1)*.04);
+    ctx.shadowColor=phase>=3?'#ff3300':'#ff8800'; ctx.shadowBlur=phase>=3?22:12;
+  }
   if(flash){ ctx.globalAlpha=.35; }
 
-  // ── CLAWS ──
-  const ca=Math.sin(b.clawA)*.22;
+  // ── CLAWS (激怒で大きく揺れる) ──
+  const caBase=rage?0.35:0.22;
+  const ca=Math.sin(b.clawA)*(caBase+(phase>=4?.15:0));
   // Left claw arm
   ctx.save(); ctx.translate(sx-2,sy+b.h/2-4); ctx.rotate(-Math.PI/4-ca);
   drawBossClaw(rage,false); ctx.restore();
@@ -1634,10 +2246,16 @@ function drawBoss(){
   ctx.save(); ctx.translate(sx+b.w+2,sy+b.h/2-4); ctx.rotate(Math.PI/4+ca);
   drawBossClaw(rage,true); ctx.restore();
 
-  // ── BODY ──
-  const bc=rage?'#ff1100':'#cc3300';
-  const bh=rage?'#ff5533':'#ee5533';
-  const bd=rage?'#aa0000':'#aa2200';
+  // ── BODY ── (HPによる色変化)
+  const bc=phase>=4?'#ff0000':phase>=3?'#ff1500':phase>=2?'#e82800':'#cc3300';
+  const bh=phase>=4?'#ff6644':phase>=3?'#ff4422':phase>=2?'#ff5522':'#ee5533';
+  const bd=phase>=4?'#aa0000':phase>=3?'#990000':phase>=2?'#aa1100':'#aa2200';
+  // フェーズ2+ でシェル上に汗/泡ドット
+  if(phase>=2 && tick%4<2){
+    ctx.fillStyle=`rgba(150,200,255,${.25+phase*.08})`;
+    ctx.fillRect(sx+5,sy+14,2,2); ctx.fillRect(sx+b.w-8,sy+20,2,2);
+    if(phase>=3){ ctx.fillRect(sx+12,sy+18,2,2); ctx.fillRect(sx+b.w/2,sy+28,2,2); }
+  }
   // Main oval
   ctx.fillStyle=bc; ctx.fillRect(sx+3,sy+10,b.w-6,b.h-10);
   ctx.fillRect(sx+7,sy+5,b.w-14,8); ctx.fillRect(sx+12,sy+2,b.w-24,5);
@@ -1655,7 +2273,8 @@ function drawBoss(){
     const ew=Math.sin(b.eyeA+i*1.3)*.9;
     const ecx=sx+b.w/2+ex;
     ctx.fillStyle=bd; ctx.fillRect(ecx-1,sy-7+ew,3,10);
-    ctx.fillStyle=rage?'#ff8800':'#ff5533'; ctx.fillRect(ecx-5,sy-15+ew,10,10);
+    const eyeCol=phase>=4?`hsl(${tick*8%60},100%,60%)`:phase>=3?'#ff4400':phase>=2?'#ff7700':'#ff5533';
+    ctx.fillStyle=eyeCol; ctx.fillRect(ecx-5,sy-15+ew,10,10);
     ctx.fillStyle='#fff'; ctx.fillRect(ecx-4,sy-14+ew,8,6);
     const pd=player.x>b.x?1:-1;
     ctx.fillStyle='#000'; ctx.fillRect(ecx-1+pd,sy-12+ew,3,4);
@@ -1676,18 +2295,20 @@ function drawBoss(){
   ctx.globalAlpha=1;
   ctx.fillStyle='#330';
   ctx.fillRect(sx-4,sy-24,b.w+8,8);
-  ctx.fillStyle=rage?'#ff1100':b.hp<=3?'#ff8800':'#ff4400';
+  ctx.fillStyle=phase>=4?`hsl(${tick*10%60+0},100%,50%)`:phase>=3?'#ff1100':phase>=2?'#ff6600':'#ff4400';
   ctx.fillRect(sx-4,sy-24,Math.round((b.w+8)*b.hp/b.maxHp),8);
   ctx.strokeStyle='#fff'; ctx.lineWidth=1;
   ctx.strokeRect(sx-4,sy-24,b.w+8,8);
   ctx.fillStyle='#fff'; ctx.font='bold 5px monospace';
   ctx.textAlign='center'; ctx.textBaseline='middle';
   ctx.fillText('KING CRAB',sx+b.w/2,sy-20);
+  ctx.shadowBlur=0; ctx.shadowColor='transparent';
 }
 
 function drawBossClaw(rage,right){
-  const col=rage?'#ff2200':'#cc3300';
-  const hcol=rage?'#ff5533':'#ee4422';
+  const phase=boss._phase||1;
+  const col=phase>=4?'#ff0000':phase>=3?'#ff2200':phase>=2?'#e03300':'#cc3300';
+  const hcol=phase>=4?'#ff7766':phase>=3?'#ff5533':phase>=2?'#ff4422':'#ee4422';
   const tcol='#ff9977';
   ctx.fillStyle=col; ctx.fillRect(-5,0,20,9); // arm
   ctx.fillStyle=hcol; ctx.fillRect(-4,0,18,3);
@@ -1882,6 +2503,22 @@ function drawHUD(){
   // Progress
   ctx.fillStyle='#555'; ctx.fillRect(W-50,4,46,5);
   ctx.fillStyle='#4488ff'; ctx.fillRect(W-50,4,Math.round(46*Math.min(1,player.x/(LW*T-W))),5);
+  // ハンマー残時間バー
+  if(player.hammerT>0){
+    const hw=Math.round(50*player.hammerT/400);
+    ctx.fillStyle='rgba(0,0,0,.6)'; ctx.fillRect(W/2-25,0,50,4);
+    const hpulse=Math.floor(player.hammerT/6)%2;
+    ctx.fillStyle=hpulse?'#ffcc00':'#ff8800'; ctx.fillRect(W/2-25,0,hw,4);
+    ctx.fillStyle='#fff'; ctx.font='5px monospace'; ctx.textAlign='center';
+    ctx.fillText('🔨',W/2,12);
+  }
+  // ダブルジャンプ所持アイコン
+  if(player.djump){
+    ctx.fillStyle='#88ff44'; ctx.font='bold 6px monospace'; ctx.textAlign='left';
+    const dx=player.fire?116:player.iceReady>0?116:75;
+    ctx.fillText('2↑',dx,8);
+  }
+
   // Boss warning
   if(bossWarn>0 && Math.floor(bossWarn/8)%2===0){
     ctx.fillStyle='rgba(200,0,0,.75)'; ctx.fillRect(0,15,W,11);
@@ -1999,24 +2636,59 @@ buildLevel(); // initial build for title screen background
 
 function loop(){
   requestAnimationFrame(loop);
-  tick++;
   ctx.fillStyle='#5c94fc'; ctx.fillRect(0,0,W,H);
 
   if(gameState==='title')   { drawTitle(); return; }
   if(gameState==='win')     { drawWin(); return; }
   if(gameState==='gameover'){ drawGameOver(); return; }
 
-  if(!unusedPhotoViewing) update(); // サムネイル閲覧中はゲームをポーズ
+  if(!unusedPhotoViewing && !paused) update();
 
-  // Background
-  const bg=['#5c94fc','#70a8fc','#84bcfc'];
-  bg.forEach((c,i)=>{ ctx.fillStyle=c; ctx.fillRect(0,i*(H/3),W,H/3+1); });
-  const coff=(tick*.25)%(W+80);
-  [[coff-80,25,55,15],[coff-60+160,45,70,12],[coff-20+240,20,45,13]].forEach(([cx,cy,cw,ch])=>{
-    ctx.fillStyle='rgba(255,255,255,.78)';
-    cx=((cx%(W+80))+W+80)%(W+80)-80;
-    ctx.fillRect(cx,cy,cw,ch); ctx.fillRect(cx+8,cy-6,cw-16,8); ctx.fillRect(cx+14,cy-10,cw-28,6);
-  });
+  // ── パラックス背景（視差スクロール） ────────────────────
+  // 空グラデーション
+  {const grd=ctx.createLinearGradient(0,0,0,H);
+  grd.addColorStop(0,'#2a80ee'); grd.addColorStop(.6,'#60b0f8'); grd.addColorStop(1,'#a0d8ff');
+  ctx.fillStyle=grd; ctx.fillRect(0,0,W,H);}
+
+  // Layer1: 遠い山（視差 0.06）
+  {const ox=(-camX*.06)%(W*2);
+  ctx.fillStyle='#6a9ad8';
+  for(let mx=Math.floor(ox/64)*64-64;mx<W+64;mx+=64){
+    ctx.beginPath(); ctx.moveTo(mx,H*.75);
+    ctx.lineTo(mx+12,H*.42); ctx.lineTo(mx+24,H*.62); ctx.lineTo(mx+36,H*.36);
+    ctx.lineTo(mx+48,H*.54); ctx.lineTo(mx+64,H*.75); ctx.fill();
+  }
+  // 山の雪冠
+  ctx.fillStyle='rgba(255,255,255,.25)';
+  for(let mx=Math.floor(ox/64)*64-64;mx<W+64;mx+=64){
+    ctx.beginPath(); ctx.moveTo(mx+32,H*.42); ctx.lineTo(mx+36,H*.36); ctx.lineTo(mx+40,H*.42); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(mx+8,H*.5); ctx.lineTo(mx+12,H*.42); ctx.lineTo(mx+16,H*.5); ctx.fill();
+  }}
+
+  // Layer2: 中景の丘（視差 0.18）
+  {const ox2=(-camX*.18)%(W*2);
+  ctx.fillStyle='#3a9e3a';
+  for(let mx=Math.floor(ox2/48)*48-48;mx<W+48;mx+=48){
+    ctx.beginPath(); ctx.moveTo(mx,H*.78);
+    ctx.quadraticCurveTo(mx+12,H*.60,mx+24,H*.68);
+    ctx.quadraticCurveTo(mx+36,H*.58,mx+48,H*.78); ctx.fill();
+  }
+  // ヤシの木シルエット
+  ctx.fillStyle='#2a7e2a';
+  for(let mx=Math.floor(ox2/96)*96+20;mx<W+96;mx+=96){
+    ctx.fillRect(mx,H*.58,3,20); // 幹
+    ctx.beginPath(); ctx.arc(mx+1,H*.58,10,0,Math.PI*2); ctx.fill(); // 葉
+    ctx.fillRect(mx-8,H*.56,8,2); ctx.fillRect(mx+4,H*.56,8,2);
+  }}
+
+  // Layer3: 雲（視差 0.35 + 自律移動）
+  {const cbase=(-camX*.35+tick*.18);
+  [[0,22,55,13],[180,40,68,11],[300,18,42,14],[440,35,60,12]].forEach(([bcx,cy,cw,ch])=>{
+    const cx=((cbase+bcx)%(W+100)+W+100)%(W+100)-100;
+    ctx.fillStyle='rgba(255,255,255,.82)';
+    ctx.fillRect(cx,cy,cw,ch); ctx.fillRect(cx+8,cy-ch*.5,cw-16,ch*.6);
+    ctx.fillRect(cx+16,cy-ch,cw-32,ch*.5);
+  });}
 
   // World tiles
   const tx0=Math.max(0,Math.floor(camX/T)-1), tx1=Math.min(LW,tx0+22);
@@ -2032,11 +2704,14 @@ function loop(){
   }
 
   drawFlag();
+  drawCheckpoint();
   items.forEach(it=>{ if(!it.collected) drawItem(it); });
   enemies.forEach(e=>drawEnemy(e));
   fireballs.forEach(fb=>drawFireball(fb));
   iceballs.forEach(ib=>drawIceball(ib));
   thrownEnemies.forEach(te=>drawThrownEnemy(te));
+  movPlats.forEach(mp=>drawMovPlat(mp));
+  barrels.forEach(br=>{ if(br.alive) drawBarrel(br); });
   projs.forEach(p=>drawProj(p));
   drawBoss();
 
@@ -2056,11 +2731,30 @@ function loop(){
     ctx.globalAlpha=1;
   });
 
+
+  // パイプ警告「！」表示
+  PIPE_DEFS.forEach((pd,i)=>{
+    if(pipeWarn[i]>0 && Math.floor(pipeWarn[i]/7)%2===0){
+      const sx=Math.round(pd.x-camX+shakeX);
+      const sy=Math.round(pd.pipeTopY-camY+shakeY)-14;
+      ctx.fillStyle='#ffe000';
+      ctx.strokeStyle='#cc0000';
+      ctx.lineWidth=1;
+      ctx.font='bold 13px monospace';
+      ctx.textAlign='center';
+      ctx.textBaseline='middle';
+      ctx.strokeText('!',sx,sy);
+      ctx.fillText('!',sx,sy);
+    }
+  });
+
   drawPlayer();
-  drawPhotoOverlay();          // 取得時の一時表示（1.5秒）
-  drawPhotoCollection();       // 左上コレクションサムネイル
-  if(unusedPhotoViewing) drawPhotoViewerFull(); // フルスクリーン閲覧（ゲームポーズ）
+  drawPhotoOverlay();
+  drawPhotoCollection();
+  if(unusedPhotoViewing) drawPhotoViewerFull();
   drawHUD();
+  drawUpgradeHUD();
+  if(paused) drawPauseOverlay();
 }
 
 loop();
@@ -2077,6 +2771,33 @@ function drawUpgradeHUD(){
   ctx.lineWidth=1;
   ctx.strokeRect(2,2,166,30);
 
+  // 水中オーバーレイ
+  if(player && player.inWater){
+    ctx.fillStyle='rgba(20,80,180,.18)';
+    ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='rgba(80,160,255,.35)';
+    ctx.lineWidth=8;
+    ctx.strokeRect(0,0,W,H);
+  }
+  // コンボ表示
+  if(p.combo>1&&p.comboT>0){
+    const calpha=Math.min(1,p.comboT/20);
+    ctx.globalAlpha=calpha;
+    ctx.font='bold 11px monospace'; ctx.textAlign='left'; ctx.textBaseline='top';
+    const cmul=Math.pow(2,Math.min(p.combo-1,5));
+    ctx.fillStyle='#ff9900'; ctx.fillText(`${p.combo}COMBO ×${cmul}`,4,24);
+    ctx.globalAlpha=1;
+  }
+  // 磁石エフェクト（プレイヤー周囲にリング）
+  if(p.magnet&&p.magnetT>0){
+    const rx=Math.round(p.x+p.w/2-camX+shakeX), ry=Math.round(p.y+p.h/2-camY+shakeY);
+    for(let ri=0;ri<3;ri++){
+      const ang=tick*.09+ri*(Math.PI*2/3);
+      const mr=58+Math.sin(tick*.14+ri)*7;
+      ctx.strokeStyle=`rgba(255,200,0,${.35-ri*.1})`; ctx.lineWidth=2;
+      ctx.beginPath(); ctx.arc(rx,ry,mr,ang,ang+Math.PI*1.3); ctx.stroke();
+    }
+  }
   // hearts
   ctx.font='bold 12px monospace';
   ctx.textAlign='left';
@@ -2091,7 +2812,7 @@ function drawUpgradeHUD(){
   // power
   ctx.fillStyle='#fff';
   ctx.font='bold 7px monospace';
-  const pow = p.fire ? '🔥 FIRE' : (p.big ? '⬆ BIG' : 'NORMAL');
+  const pow = p.cape ? '🪶 CAPE' : (p.fire ? '🔥 FIRE' : (p.big ? '⬆ BIG' : 'NORMAL'));
   ctx.fillText(pow, 7, 21);
 
   // time / best
@@ -2147,24 +2868,46 @@ function drawUpgradeHUD(){
     ctx.fillStyle='rgba(255,220,80,.18)';
     ctx.fillRect(0,0,W,H);
     ctx.fillStyle='rgba(0,0,0,.72)';
-    ctx.fillRect(30,72,W-60,70);
+    ctx.fillRect(24,66,W-48,100);
     ctx.strokeStyle='#ffd700';
-    ctx.strokeRect(30,72,W-60,70);
-    ctx.fillStyle='#ffd700';
+    ctx.strokeRect(24,66,W-48,100);
+    const isBest=lastClearIsBest;
+    const rankText=lastClearRankIn ? `RANK IN!  ${lastClearRank}位` : 'RANK OUT';
+    ctx.fillStyle=isBest?'#ffef5a':'#ffd700';
     ctx.font='bold 16px monospace';
     ctx.textAlign='center';
-    ctx.fillText('🎉 CLEAR! 🎉', W/2, 94);
+    ctx.fillText(isBest?'🏆 NEW RECORD!! 🏆':'🎉 CLEAR! 🎉', W/2, 90);
     ctx.fillStyle='#fff';
     ctx.font='9px monospace';
-    ctx.fillText('TIME '+fmtTime(clearTimeMs), W/2, 112);
-    ctx.fillText('BEST '+fmtTime(bestClearTime), W/2, 128);
+    ctx.fillText('SCORE '+String(lastClearScore||player.score), W/2, 106);
+    ctx.fillText('TIME  '+fmtTime(clearTimeMs), W/2, 119);
+    ctx.fillStyle=isBest?'#ffef5a':'#9ee7ff';
+    ctx.fillText('BEST  '+fmtTime(bestClearTime), W/2, 132);
+    ctx.fillStyle=lastClearRankIn?'#ffdd55':'#cccccc';
+    ctx.font='bold 9px monospace';
+    ctx.fillText(rankText, W/2, 145);
     ctx.fillStyle='#9ee7ff';
-    ctx.font='8px monospace';
-    ctx.fillText('ページ更新で再スタート', W/2, 139);
+    ctx.font='7px monospace';
+    ctx.fillText('更新できたか一目でわかるようにしました', W/2, 157);
     ctx.restore();
   }
 }
 
+
+// ── PAUSE BUTTON ──────────────────────────────────────────────────
+// ── PAUSE BUTTON ──────────────────────────────────────────────────
+(function(){
+  const btn = document.getElementById('pauseBtn');
+  function togglePause(e){
+    e.preventDefault(); e.stopPropagation();
+    initAudio();
+    if(gameState !== 'play') return;
+    paused = !paused;
+    btn.textContent = paused ? '▶' : '⏸';
+  }
+  btn.addEventListener('touchstart', togglePause, {passive:false});
+  btn.addEventListener('click', togglePause);
+})();
 </script>
 </body>
 </html>
