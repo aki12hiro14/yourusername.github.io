@@ -429,7 +429,8 @@ const LH = 15;   // level height (tiles)
 const GR = 11;   // ground row
 
 const GRAVITY = 0.46;
-const JUMP_V  = -8.5;
+const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+const JUMP_V  = IS_TOUCH ? -7.0 : -8.5;
 const RUN_SPD = 2.3;
 
 // Tile IDs
