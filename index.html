@@ -259,14 +259,14 @@ canvas {
 #startOverlay.hidden { display:none; }
 
 @media (max-width:700px) and (orientation:portrait){
-  #stickArea { width:112px; height:112px; }
-  #stickKnob { width:50px; height:50px; }
+  #stickArea { width:138px; height:138px; }
+  #stickKnob { width:62px; height:62px; }
   #touchControls .actions {
-    grid-template-columns:62px 76px;
-    grid-template-rows:62px 62px;
+    grid-template-columns:66px 80px;
+    grid-template-rows:66px 66px;
     gap:9px;
   }
-  #jumpBtn { width:76px; height:76px; }
+  #jumpBtn { width:80px; height:80px; }
 }
 
 
@@ -905,7 +905,7 @@ function startStage3(){
   currentStage=3;
   buildLevelStage3();
 
-  player.x=48; player.y=0;
+  player.x=48; player.y=5*T;
   player.vx=0; player.vy=0;
   player.hp=3;
   player.big=true; player.fire=false; player.cape=false;
@@ -1720,8 +1720,8 @@ function movePlayer(){
   if(p.vy>=0){
     const ty=Math.floor((p.y+ph)/T);
     const ta=getTile(x0,ty), tb=getTile(x1,ty);
+    if(ta===SPIKE||tb===SPIKE){ hurtPlayer(); return; }
     if(isSolid(ta)||isSolid(tb)){
-      if(ta===SPIKE||tb===SPIKE){ hurtPlayer(); return; }
       p.y=ty*T-ph;
       if(ta===SPRING||tb===SPRING){
         p.vy=-15; p.djumpUsed=false;
@@ -1842,6 +1842,7 @@ function spawnItem(tx,ty,type){
 function hurtPlayer(){
   if(player.mini){ player.mini=false; player.miniT=0; player.dead=true; player.deadT=90; sndHurt(); hitStopT=5; return; }
   if(player.invT>0) return;
+  if(player.hammerT>0) return; // ハンマー中は無敵
   if(player.fire){ player.fire=false; player.invT=120; sndHurt(); return; } // fire→big
   if(player.cape){ player.cape=false; player.capeT=0; player.invT=120; sndHurt(); return; } // cape loss
   if(player.big){ player.big=false; player.invT=120; sndHurt(); hitStopT=5; }
@@ -2000,7 +2001,8 @@ function update(){
   if(left)  { p.vx-=accel*(0.75+Math.abs(stickPowerX)*0.45); p.facing=-1; }
   if(right) { p.vx+=accel*(0.75+Math.abs(stickPowerX)*0.45); p.facing= 1; }
   if(!left&&!right) p.vx*=fric;
-  p.vx=Math.max(-RUN_SPD,Math.min(RUN_SPD,p.vx));
+  const curSpd = p.hammerT>0 ? RUN_SPD*1.5 : RUN_SPD;
+  p.vx=Math.max(-curSpd,Math.min(curSpd,p.vx));
   // 水中判定
   {
     const wTx=Math.floor((p.x+p.w/2)/T);
@@ -2255,8 +2257,12 @@ function update(){
       if(it.type==='cape'){ ctx.fillStyle='#c98b3c'; ctx.fillRect(x+2,y+3,10,9); ctx.fillStyle='#fff2aa'; ctx.fillRect(x+4,y+5,6,2); ctx.fillStyle='#7a3b12'; ctx.fillRect(x+1,y+4,2,8); }
     if(it.type==='hammer'){
         p.hammerT=400; p.score+=1000; sndHammer();
-        addParts(it.x+7,it.y+7,'#ff8800',20); addParts(it.x+7,it.y+7,'#ffee00',14);
-        spawnFloat(it.x+7,it.y,'HAMMER!!','#ffcc00');
+        addParts(it.x+7,it.y+7,'#ff8800',40); addParts(it.x+7,it.y+7,'#ffee00',30);
+        addParts(it.x+7,it.y+7,'#ffffff',20);
+        shakeX=8; shakeY=8;
+        spawnFloat(it.x+7,it.y,'🔨 HAMMER!!','#ffcc00');
+        spawnFloat(it.x+7,it.y+10,'無敵！！','#ff8800');
+        phaseFlashT=18; phaseFlashCol='rgba(255,160,0,';
       }
       if(it.type==='cape'){
         p.cape=true; p.capeT=1200; p.score+=1000; sndCape();
@@ -2713,7 +2719,9 @@ function updateBoss(){
   if(b.vy<0 && (isSolid(getTile(bx0,byT))||isSolid(getTile(bx1,byT)))){
     b.y=(byT+1)*T; b.vy=Math.abs(b.vy)*.4;
   } // 着地判定（閾値を上げて誤爆防止）
-  if(onGround){ b.y=byB*T-b.h; b.vy=0; }
+  if(onGround){ b.y=Math.min(byB,GR)*T-b.h; b.vy=0; }
+  // ハードクランプ：絶対に地面（GR行）より下には行かない
+  if(b.y + b.h > GR*T){ b.y = GR*T - b.h; b.vy = 0; }
   // 画面外上限：ボスが上に飛び出したら跳ね返す
   if(b.y < (GR-7)*T){ b.y=(GR-7)*T; b.vy=Math.abs(b.vy)*.4; } // 天井タイル下に固定
 
