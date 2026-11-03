@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light">
-<title>ShuntSound | 開発進捗 Outline 1.3 — 2026.11.03</title>
+<title>ShuntSound | 開発進捗 Outline 1.4 — 2026.11.03</title>
 <style>
 :root {--navy:#123047;--ink:#1a3142;--muted:#617486;--teal:#137b74;--teal2:#e4f3f0;--bg:#f4f7f8;--paper:#fff;--line:#dce5e9;--amber:#a86b25;--amberbg:#fff6e8;--shadow:0 10px 30px rgba(26,55,70,.07)}
 *{box-sizing:border-box}
@@ -97,7 +97,7 @@ svg{max-width:100%;height:auto;display:block}
   <h1>ShuntSound<br>開発アウトライン</h1>
   <p class="subtitle">シャント音を、循環動態の連続モニタリングへ。</p>
   <p class="lead">5秒の録音成功から、4〜5時間以上の連続収音・リアルタイム無線通信・PC解析、さらに臨床的な早期予測性能の検証まで。研究仮説を、段階的に検証可能な装置とソフトウェアへ発展させるための基本設計書。</p>
-  <div class="meta"><span>作成日：2026年11月3日</span><span>更新版：Outline 1.3</span><span>現行実機：v11.0-bench1</span></div>
+  <div class="meta"><span>作成日：2026年11月3日</span><span>更新版：Outline 1.4</span><span>現行実機：v12.0-link1</span></div>
 </header>
 <div style="max-width:1100px;margin:20px auto 0;padding:0 22px">
 <section id="outline" style="border-top:5px solid var(--teal)">
@@ -106,9 +106,10 @@ svg{max-width:100%;height:auto;display:block}
  <div class="tablewrap"><table>
  <tr><th>工程</th><th>到達条件</th><th>現在地</th></tr>
  <tr><td>v10：収音・保存</td><td>5秒録音、WAV保存、PC試聴</td><td><span class="tag good">実機確認済み</span></td></tr>
- <tr><td><strong>v11：連続録音</strong></td><td>5時間の分割RAW保存＋5秒窓・1秒更新ログ</td><td><span class="tag next">現在ここ：10分確認済み / 5時間試験中</span></td></tr>
- <tr><td>v12：BLE接続</td><td>毎秒の特徴量転送、切断中の記録と再接続補完</td><td>link1：毎秒音量送信とPC画面を試作・実機未検証。切断補完は未実装。</td></tr>
- <tr><td>PCモニター</td><td>実測値の時系列表示・保存・イベント同期</td><td>模擬表示が土台 / 実測対応はこれから</td></tr>
+ <tr><td><strong>v11：連続録音</strong></td><td>5時間の分割RAW保存＋5秒窓・1秒更新ログ</td><td><span class="tag next">10分正常終了確認 / 5時間未達</span></td></tr>
+ <tr><td>v12：BLE接続</td><td>毎秒の特徴量転送、切断中の記録と再接続補完</td><td>60秒同時動作確認 / 10分試験開始・結果待ち</td></tr>
+ <tr><td>PCモニター</td><td>実測値の時系列表示・保存・イベント同期</td><td>実測BLEグラフ・CSV保存を60秒で確認</td></tr>
+ <tr><td>波形・周波数解析</td><td>SD原音から波形・スペクトログラム・帯域・周期性を評価</td><td>次の解析開発 / 実シャント音での検証は今後</td></tr>
  <tr><td>集音ヘッド・筐体</td><td>接触構造、固定・装着条件の再現性</td><td>並行して開発</td></tr>
  <tr><td>臨床研究・予測モデル</td><td>シャント音と血圧・介入を同期し、独立データで検証</td><td>実機・接触安全の検証後</td></tr>
  </table></div>
@@ -116,7 +117,8 @@ svg{max-width:100%;height:auto;display:block}
  <ul><li><strong>無停止収音：</strong>16kHz・16bit・monoを開始条件とし、まず5時間の連続記録を実機で確認する。</li>
  <li><strong>5秒窓・1秒更新：</strong>録音を止めずに特徴量を更新する。現在はRMS・AC RMS等、帯域特徴量・周期性は今後実装する。</li>
  <li><strong>原音はSDが正本：</strong>短いWAVに分割し、連番・サンプル数・欠損・書込みエラーを記録する。</li>
- <li><strong>通信と記録を分離：</strong>BLEは特徴量を毎秒送る計画。切断しても収音・SD記録を継続する設計とする。</li>
+ <li><strong>通信と記録を分離：</strong>BLEはRMS・AC RMS等を毎秒送信する実装済み。切断しても収音・SD記録を継続する設計とする。</li>
+ <li><strong>原音と利得：</strong>取得PCMを正本として保存し、追加の自動音量調整・正規化で振幅変化を消さない。収音条件・固定利得・変換設定を記録し、表示・試聴用処理は原音と分ける。</li>
  <li><strong>検証の区別：</strong>実装済みと実機確認済みを分け、v10を保管する。未検証の機能や臨床的予測性能は完了扱いにしない。</li></ul>
  <p class="small">この全体アウトライン・重要要件を最上部に維持し、下の進捗・試験結果・次の行動を随時更新する。</p>
 </section></div>
@@ -130,6 +132,7 @@ svg{max-width:100%;height:auto;display:block}
 <a href="#today">02　現在の到達点</a>
 <a href="#architecture">03　システム全体像</a>
 <a href="#signal">04　録音・通信の設計</a>
+<a href="#waveform">原音・波形解析と増幅方針</a>
 <a href="#roadmap">05　開発ロードマップ</a>
 <a href="#dashboard">06　PCモニター</a>
 <a href="#leapfrog">07　AIとリープフロッグ</a>
@@ -148,36 +151,13 @@ svg{max-width:100%;height:auto;display:block}
  </div>
 </section>
 <section id="today">
- <div class="sectionhead"><span class="idx">02 / CURRENT STATUS</span><h2>現在の到達点：v11の短時間実機検証</h2></div>
- <div class="grid2">
-  <div class="stat"><div class="name">現在の実機</div><div class="num">v11.0-bench1</div><div class="desc">XIAO ESP32-S3 Plus + 1.47インチ画面 + PDMマイク + microSD。v10は比較用として別途保管。</div></div>
-  <div class="stat"><div class="name">現在の工程</div><div class="num">5時間テスト実施中</div><div class="desc">2026年11月3日・10分試験の正常終了ログを確認。5時間試験は本体RECORDING・Mode 18000 sec・Saved 13 secの開始画面まで確認。終了結果は未確認。</div></div>
- </div>
- <div class="emphasis" style="margin-top:14px"><strong>確認済み：</strong>60秒試験のログでは960,000サンプルを記録し、棄却・DMAオーバーフロー・読み取りエラー・Faultは0、FINALIZEDは1。10秒×6区間の保存記録と、1秒ごとの特徴量60行の連続性を確認。実際に受領した先頭WAVは16kHz・16bit・mono、10秒で、先頭10行の特徴量と一致。</div>
- <ul class="statuslist">
-   <li><span class="dot done"></span>Arduino実機向けコンパイル・書き込み</li>
-   <li><span class="dot done"></span>60秒試験の正常終了ログ</li>
-   <li><span class="dot done"></span>分割WAV保存のログ整合性</li>
-   <li><span class="dot done"></span>5秒窓・1秒更新のRMS / AC RMS・クリッピング記録</li>
-   <li><span class="dot"></span>10分試験の正常終了ログ・区間連続性を確認</li>
-   <li><span class="dot"></span>5時間以上の連続録音：試験中・終了未確認</li>
-   <li><span class="dot"></span>帯域特徴量・周期性：未実装 / v12のBLE音量送信は試作・実機未検証</li>
-   <li><span class="dot"></span>実測PCグラフ・実際のシャント音・予測性能：未確認</li>
- </ul>
- <div class="notice" style="margin-top:14px"><strong>前回の10分試験は中断：</strong>V1100002のSEGMENTSは60秒×7区間までOK、FEATURESは473秒まで連続。EVENTSには開始設定2行のみで、終了集計・FINALIZEDがない。起動時のREADY / Mode 60 sec / Saved 0 secへの復帰も確認。ユーザーはPCのスリープを疑っているが、原因は未確定。スリープを防ぐ設定を案内後、10分再試験の開始報告を受けた。</div>
- <p class="small" style="margin-top:12px">検証の範囲：ログ整合性と受領WAVの検査結果。全WAVの独立検査や、長時間の物理的な収音欠損ゼロを証明したものではない。起動ログはpsram=0で、今回のバッファは内部RAMで動作。v11は無線を使用しない。PC Monitor v0.2は引き続き模擬データ表示用。</p>
- <div class="emphasis" style="margin-top:14px"><strong>10分再試験の結果：</strong>600秒・9,600,000サンプルで正常終了（FINALIZED=1）。棄却・DMAオーバーフロー・読み取りエラー・Faultは0。60秒×10区間の保存ログと、特徴量600行の連続性を確認。先頭60秒WAVと特徴量も一致。全10本のWAV自体は未検査。前回中断の原因がスリープだったかは、この結果だけでは断定しない。</div>
- <div class="notice" style="margin-top:14px"><strong>並行開発：v12.0-link1（実機未検証）</strong><p>v11を元に、RMS・AC RMS・クリッピング率・録音状態を毎秒BLE通知する別スケッチと、PCの受信・グラフ・CSV保存画面を作成。固定長20バイト形式、別のBLE送信タスク、8件の送信キューを使用。切断中もSD記録を継続する設計だが、実機通信・併用時の録音性能はこれから確認する。未受信データのBLE補完は未実装。</p><p><a href="./monitor.html">Bluetooth音量モニターを開く</a>。試作スケッチ一式は開発者への納品ZIPに同梱。</p><p>ホスト上の模擬PCMでv11とWAV・特徴量の一致、C++とJSの符号化整合性、模擬接続の切断・再接続・欠落表示を確認。実ESP32向けコンパイル・実ブラウザ描画・実BLE通信は未確認。今の5時間試験には書き込まず、終了後か別実機で最初の60秒を検証する。</p></div><h3 style="margin-top:18px">次に確認するもの</h3>
- <p>現在は安定電源で5時間試験中。終了後にEVENTS / SEGMENTS / FEATURESとWAVを照合し、終了・サンプル数・区間連続性・エラーを確認する。PCから給電する場合はスリープを防ぎ、バッテリー残量にも注意する。</p>
+ <div class="sectionhead"><span class="idx">02 / CURRENT STATUS</span><h2>現在の到達点：v12のSD録音＋BLE送信</h2></div>
+ <div class="grid2"><div class="stat"><div class="name">現在の実機</div><div class="num">v12.0-link1</div><div class="desc">Arduino-ESP32 3.3.12 / Seeed_GFX2 1.0.0。コンパイル・実機書き込み・ブラウザBLE受信を確認。</div></div><div class="stat"><div class="name">現在の工程</div><div class="num">60秒同時動作 成功</div><div class="desc">10分BLE同時動作試験は開始写真を確認（録音経過24秒）。600秒の正常終了判定は結果待ち。</div></div></div>
+ <div class="emphasis" style="margin-top:14px"><strong>今回の照合結果：</strong>v12のSD特徴量60行とBLE受信60行は、RMS・AC RMSの整数丸めを考慮して全件一致。秒番号1〜60に欠落・重複なし。960,000サンプル、棄却・DMAオーバーフロー・読み取りエラー・BLE送信キュー破棄・Faultはすべて0、FINALIZED=1。分割ログは10秒×6区間で連続。受領した先頭WAV（10秒）から再計算した特徴量も先頭10行と一致。残り5本のWAV本体は未受領。</div>
+ <ul class="statuslist"><li><span class="dot done"></span>原音のSD分割保存と毎秒BLE送信の60秒同時動作</li><li><span class="dot done"></span>実測PCグラフ、音量CSV・接続イベントCSV保存</li><li><span class="dot done"></span>v11単独の10分正常終了・600行のログ確認</li><li><span class="dot"></span>v12の10分試験：開始済み・結果待ち</li><li><span class="dot"></span>BLE切断・再接続中のSD継続：実機試験待ち</li><li><span class="dot"></span>未受信特徴量の再送：未実装</li><li><span class="dot"></span>長時間録音：1時間・5時間は未達</li><li><span class="dot"></span>実シャント音の品質・波形解析・予測性能：未検証</li></ul>
+ <p style="margin-top:12px"><a href="./monitor.html">Bluetooth音量モニターを開く</a></p><h3>試験履歴（2026年11月3日）</h3><ul><li>v11：60秒と10分の正常終了をログで確認。最初の10分試験は中断し、再試験で成功。</li><li>v11：5時間を目標に開始したが、ユーザー報告では電池切れで中断。受領データは特徴量1,371秒（22分51秒）、確定分割22本（22分）。終了ログなし。1時間成功とは判定しない。</li><li>v12：実機書き込み後、60秒のSD・BLE照合に成功。BLEの到着間隔は約0.005〜2.16秒、平均約1.007秒で、毎秒の特徴量は全件受信。厳密な等間隔到着は保証しない。</li><li>v12：続いて600秒モードでBLE接続・録音開始を写真確認。完了結果は未受領。</li></ul>
  <h3>このアウトラインの更新方法</h3>
  <p>このHTMLと、新しいログ・WAV・画面写真をChatGPTに送り「進捗更新して」と伝える。確認できた結果だけを反映し、実装済み・実機確認済み・試験中・未実施を分けて更新する。次回は更新版HTMLを送る。単にページを開くだけでは自動更新しない。</p>
- <details><summary>更新履歴・根拠（2026年11月3日）</summary><ul>
- <li>Outline 1.0：v10の5秒録音・SD保存・PC試聴を起点とする計画。</li>
- <li>Outline 1.3：パスワード画面を除去。v11の実装・書き込み、60秒試験のログ確認、10分試験の中断と再実施を追記。</li>
- <li>60秒試験：V1100001のEVENTS.CSV、SEGMENTS.CSV、FEATURES.CSV、RAW00001.WAV。最大待機キュー19ブロック、最長単一SD書込み41,640µs。</li>
- <li>中断試験：FEATURES(1).CSV、EVENTS(1).CSV、SEGMENTS(1).CSV、RAW00001(1).WAV（60秒分を読み取り確認）。</li>
- <li>再試験：EVENTS(2).CSVで9,600,000サンプル、棄却・DMAオーバーフロー・読み取りエラー・Faultはいずれも0、USER_STOP=0、FINALIZED=1。SEGMENTS(2).CSVは60秒×10区間が連続してOK。FEATURES(2).CSVは600行、欠落なく5秒窓・1秒更新、クリッピング率0。RAW00001(2).WAVは60秒で、先頭60行の特徴量と一致。最大キュー20ブロック、最長単一SD書込み140,010µs。</li>
- <li>Outline 1.3：10分再試験の正常終了ログを確認し、次工程を5時間試験へ更新。全体アウトライン・重要要件は最上部に維持。</li><li>Outline 1.3：5時間試験の開始画面を確認。並行してv12.0-link1のBLE音量送信・PC受信画面を試作。実機未検証として管理。</li></ul></details>
 </section>
 <section id="architecture">
  <div class="sectionhead"><span class="idx">03 / SYSTEM DESIGN</span><h2>システムの全体像</h2></div>
@@ -227,18 +207,28 @@ svg{max-width:100%;height:auto;display:block}
   <tr><td>更新・送信</td><td>1秒ごと</td><td>解析結果の遅延を小さくする</td></tr>
   <tr><td>連続動作</td><td>まず5時間</td><td>書込欠損・メモリ・発熱・電源を確認</td></tr>
   <tr><td>SD保存</td><td>短いファイルへ分割</td><td>停止時の破損影響を小さくし、後から扱いやすくする</td></tr>
-  <tr><td>通信中断</td><td>保存継続・連番で欠損検出</td><td>再接続後に未送信の特徴量を補完。生音声はSDが正本</td></tr>
+  <tr><td>通信中断</td><td>保存継続・連番で欠損検出</td><td>再接続後の未送信特徴量補完は今後実装。生音声はSDが正本</td></tr>
   <tr><td>原音容量</td><td>約576MB / 5時間</td><td>圧縮なしの場合。ヘッダー・ログ等は別</td></tr>
  </table></div>
  <div class="notice" style="margin-top:14px"><strong>実装上の要点：</strong>マイク読み取り・SD書込み・BLE送信・画面描画を同期した1本の処理にしない。リングバッファ／二重バッファ、非同期タスク、サンプル欠損カウンタを設け、SDの一時停止が録音停止につながらない設計にする。PSRAMの有無や実効メモリは実機で確認する。</div>
+</section>
+<section id="waveform">
+ <div class="sectionhead"><span class="idx">WAVEFORM & SIGNAL QUALITY</span><h2>音量表示から、シャント音の波形解析へ</h2></div>
+ <p><strong>最終的には原音の波形・周波数・拍動に伴う変化を解析する。</strong>今の折れ線は直近最大5秒のAC RMSを約1秒ごとに表示した「音量の推移」で、音声サンプルそのものの波形ではない。一方、SDには16kHz・16bit・monoの取得PCMがWAVとして残っており、後から詳細解析できる。</p>
+ <div class="tablewrap"><table><tr><th>段階</th><th>扱うデータ</th><th>実装・評価内容</th></tr><tr><td>現在：音量</td><td>RMS / AC RMS、クリッピング、欠損</td><td>BLE送信とPC表示・CSV保存。dBFSは20 log10(AC RMS / 32768)の実装定義。校正された音圧dB SPLではない。</td></tr><tr><td>次：原音の可視化</td><td>SDのRAW WAV</td><td>時間波形、拡大表示、再生、FFT/PSD、スペクトログラム。分割ファイルはサンプル番号で接続し、欠落区間を明示。</td></tr><tr><td>次：特徴量拡張</td><td>帯域エネルギー・帯域比・包絡線・周期性候補</td><td>帯域は実音で選定。拍動との関係は参照信号と比較して検証。1秒1個のRMSだけから音声波形や脈拍を再現しない。</td></tr><tr><td>実音の品質検証</td><td>シャント音、背景音、装着条件</td><td>接触構造・固定圧の再現性、目的帯域のS/N、飽和、体動を比較。同一条件の比較と原音の試聴を行う。</td></tr><tr><td>研究段階</td><td>音響特徴量＋血圧・UF・介入時刻</td><td>前向き同期観察と独立データでの予測評価。音量低下だけを循環悪化と断定しない。</td></tr></table></div>
+ <h3>増幅なしでよいか：現時点の方針</h3>
+ <p><strong>解析用の正本は、追加のデジタル増幅・自動正規化をかけずに残す。</strong>保存後に一定倍率を掛ければ音も雑音も同じ倍率になるため、それだけでS/Nは改善しない。試聴や波形表示は別の処理コピーで拡大できる。自動利得調整（AGC）・区間ごとの正規化は追跡したい振幅変化を変えるため、追加しない方針とする。</p>
+ <p><strong>ただし「実シャント音が十分に録れるか」は未確認。</strong>今回の環境音テストのクリッピング0だけでは、収音感度が十分とは判定できない。静かな環境・同じ固定条件で、目的の音が背景雑音より明瞭か、ピークの余裕があるかを調べる。不足する場合は、まず集音ヘッド・接触膜・固定・マイクを見直し、必要に応じてPDM設定やPCM変換時の固定利得を検討する。PDMデジタルマイクに、アナログ信号用アンプをそのまま挿入する構成は想定しない。</p>
+ <p class="small">ここでいうRAWは現行PDM/I2S取得処理後のPCMであり、マイク内部処理や取得段の利得が存在しないことを意味しない。設定を確認・記録する。フィルタ処理・増幅を比較する場合も原音は保持し、倍率・帯域・処理版・収音条件を残す。16kHzで扱える周波数は理論上8kHz未満、実効帯域はマイクと取得系の特性も含めて確認する。</p>
+ <p class="small">技術参考：<a href="https://www.mathworks.com/help/dsp/ug/estimate-the-power-spectrum-in-matlab.html">MathWorks：パワースペクトルとdBFS</a> ／ <a href="https://www.mathworks.com/help/audio/ug/dynamic-range-control.html">MathWorks：動的利得制御</a> ／ <a href="https://europe.yamaha.com/en/business/audio/resources/self-training/audio-quality/07-audio-quality.html">Yamaha：ノイズ床・クリッピング・ゲイン</a>。上記の増幅・保存方針は、本プロジェクトで振幅変化を比較するための設計判断。</p>
 </section>
 <section id="roadmap">
  <div class="sectionhead"><span class="idx">05 / ROADMAP</span><h2>開発ロードマップ</h2></div>
  <ol class="rail">
   <li><span class="stepno">00</span><div class="step"><div class="stephead"><strong>v10 ｜ 収音・5秒録音・保存</strong><span class="tag good">実機確認済み</span></div><p>周囲音の録音、microSDへのWAV保存、PCでの再生を確認。実際のシャント音測定は未実施。</p><em>成果物：ShuntSound_BLE_v10.ino、RAW / HP / DSP WAV</em></div></li>
-  <li><span class="stepno">01</span><div class="step"><div class="stephead"><strong>v11 ｜ Continuous Recorder</strong><span class="tag next">10分確認済み / 5時間未検証</span></div><p>v11.0-bench1を実装・書き込み済み。60秒試験の終了・分割・特徴量ログを確認。10分再試験は600秒の正常終了・区間連続性をログで確認。5時間動作、全WAV・分割境界の詳細検査は未完了。</p><em>完成条件：収音を止めず、5時間分の原音と時系列ログが残る</em></div></li>
-  <li><span class="stepno">02</span><div class="step"><div class="stephead"><strong>v12 ｜ BLE Realtime Link</strong><span class="tag next">link1 試作済み / 実機未検証</span></div><p>RMS・帯域特徴量・品質・連番・時刻を1秒ごとに送信。切断中もSD記録を続け、再接続後に未送信の特徴量を補完。</p><em>完成条件：PC側で継続的に数値が更新され、断線が見える</em></div></li>
-  <li><span class="stepno">03</span><div class="step"><div class="stephead"><strong>PC Monitor v1.0 ｜ 実測データ対応</strong><span class="tag next">BLE音量受信画面を試作</span></div><p>既存v0.2の画面を活用し、実機データから音量・傾き・周期性候補・通信状態を表示。血圧、UF変更、補液、体動の実施時刻を記録。</p><em>完成条件：模擬値でなく実機から受け取った値を表示・保存できる</em></div></li>
+  <li><span class="stepno">01</span><div class="step"><div class="stephead"><strong>v11 ｜ Continuous Recorder</strong><span class="tag next">10分確認済み / 5時間未達</span></div><p>v11.0-bench1の60秒・10分の正常終了とログを確認。長時間試験は電源断で中断し、受領ログは22分51秒。5時間動作、全WAV・分割境界の詳細検査は未完了。</p><em>完成条件：収音を止めず、5時間分の原音と時系列ログが残る</em></div></li>
+  <li><span class="stepno">02</span><div class="step"><div class="stephead"><strong>v12 ｜ BLE Realtime Link</strong><span class="tag good">60秒同時動作確認</span></div><p>RMS・AC RMS・品質・セッションと秒番号を毎秒送信。60秒のSD・PCデータ照合済み。帯域・周期性、未受信分の再送は未実装。切断中のSD継続は設計済み・実機試験待ち。</p><em>完成条件：PC側で継続的に数値が更新され、断線が見える</em></div></li>
+  <li><span class="stepno">03</span><div class="step"><div class="stephead"><strong>PC Monitor v1.0 ｜ 実測データ対応</strong><span class="tag good">実測BLE受信済み</span></div><p>v12用モニターで実測音量・dBFS・通信状態とCSV保存を確認。今後、原音の波形・周波数解析、傾き・周期性候補を追加。血圧、UF変更、補液、体動の実施時刻を記録。</p><em>完成条件：模擬値でなく実機から受け取った値を表示・保存できる</em></div></li>
   <li><span class="stepno">04</span><div class="step"><div class="stephead"><strong>集音ヘッド・筐体 ｜ 皮膚接触構造</strong><span class="tag future">並行開発</span></div><p>小さな独立音響室、接触膜、固定方法、装着圧の再現性を試作。機器の電気的絶縁、衛生、温度、接触安全も検証。</p><em>完成条件：同じ条件で再現性ある音が取得できる</em></div></li>
   <li><span class="stepno">05</span><div class="step"><div class="stephead"><strong>研究版 ｜ シャント音と血圧の同期観察</strong><span class="tag future">実機検証後</span></div><p>同意・倫理手続き等を整え、血圧推移・除水・体動・症状・介入とシャント音特徴量を照合。ノイズや装着ずれを区別する。</p><em>完成条件：解析可能な臨床時系列データセットが蓄積される</em></div></li>
   <li><span class="stepno">06</span><div class="step"><div class="stephead"><strong>予測モデル ｜ AIによる早期兆候検出</strong><span class="tag future">研究目標</span></div><p>音響データと臨床イベントを用いてモデル開発。独立データで感度・特異度・誤警報率・予測先行時間を検証する。</p><em>完成条件：臨床的な有用性を客観的に示せる</em></div></li>
@@ -247,7 +237,7 @@ svg{max-width:100%;height:auto;display:block}
 </section>
 <section id="dashboard">
  <div class="sectionhead"><span class="idx">06 / PC MONITOR</span><h2>PC受信・解析画面</h2></div>
- <p>既存の <code>ShuntSound_PC_Monitor_v0.2.html</code> を土台に、模擬データの描画部を実測値の受信・保存へ置き換える。</p>
+ <p>v12用 <code>monitor.html</code> で実測BLE音量グラフ・状態表示・音量CSVと接続イベントCSVの保存を確認。以下は次段階の画面構想。原音の波形・周波数解析はSDのWAV読込みから追加する。</p>
  <div class="grid3"><div class="stat"><div class="name">SOUND</div><div class="num">基準比 %</div><div class="desc">RMSの変化。装着条件・背景音の影響を明示</div></div><div class="stat"><div class="name">SLOPE</div><div class="num">pt / 分</div><div class="desc">30秒・1分・3分・5分など複数窓</div></div><div class="stat"><div class="name">QUALITY</div><div class="num">信頼度</div><div class="desc">飽和・体動・欠損・周期性の不明瞭さを区別</div></div></div>
  <div class="diagram">
   <svg viewBox="0 0 745 170" role="img" aria-label="模擬的な音量トレンドの画面構想">
@@ -273,17 +263,17 @@ svg{max-width:100%;height:auto;display:block}
  <div class="emphasis" style="margin-top:14px"><strong>開発戦略：</strong>AIでソフトウェアの反復速度を上げ、医師である開発者が「臨床仮説・実測・研究デザイン・評価」に集中する。<strong>ソフト開発の短縮と、医学的妥当性の検証は別の工程</strong>として管理する。</div>
 </section>
 <section id="next">
- <div class="sectionhead"><span class="idx">08 / NEXT MILESTONE</span><h2>現在の完成条件：v11を検証する</h2></div>
- <p><strong>ShuntSound v11 — Continuous Recorder</strong> はbench1として実装・書き込み済み。60秒確認から10分、5時間へ段階的に検証する。動作するv10は別途保管する。</p>
+ <div class="sectionhead"><span class="idx">08 / NEXT MILESTONE</span><h2>次の完成条件：v12の安定性と原音解析</h2></div>
+ <p><strong>ShuntSound v11 — Continuous Recorder</strong> の10分正常終了と、v12の60秒SD＋BLE同時動作を確認済み。次はv12の10分結果を照合し、切断・再接続、安定電源での長時間試験、WAV波形解析へ進む。動作するv10は別途保管する。</p>
  <div class="checks" id="acceptanceChecklist">
   <label><input type="checkbox" data-id="v11_a"><span><strong>5時間連続録音：</strong>マイクを止めず、RAW音声が途切れず保存される</span></label>
-  <label><input type="checkbox" checked data-verified="true" data-id="v11_b"><span><strong>5秒窓 / 1秒更新：</strong>RMS等の特徴量ログを生成できる（60秒実機ログで確認済み）</span></label>
+  <label><input type="checkbox" checked data-verified="true" data-id="v11_b"><span><strong>5秒窓 / 1秒更新：</strong>RMS等の特徴量ログを生成できる（v11の10分とv12の60秒で確認済み）</span></label>
   <label><input type="checkbox" data-id="v11_c"><span><strong>保存の堅牢性：</strong>SD書込み・分割・異常停止後のデータ整合性を評価できる（短時間の正常分割は確認、異常停止後の完全性は未確認）</span></label>
   <label><input type="checkbox" data-id="v11_d"><span><strong>PCでの確認：</strong>実測CSVを読んで時系列グラフを表示できる</span></label>
   <label><input type="checkbox" data-id="v11_e"><span><strong>信号品質：</strong>サンプル欠落数・クリッピング・収音ノイズを計測できる</span></label>
  </div>
  <div class="metricbar checklist-footer"><div class="top"><span>v11 受入チェック</span><span id="progressLabel">1 / 5</span></div><div class="progress"><div id="progressFill" style="width:20%"></div></div><div class="small">初期値は今回の確認結果（1 / 5）。手動チェックは実機で条件を満たした後につけてください。次回送る前に上部のHTML保存ボタンで保存するとチェックも引き継げます。</div><button class="hide-print" style="margin-top:9px" id="resetChecklist" type="button">今回の確認結果に戻す</button></div>
- <p class="small" style="margin-top:12px">v11の受入後、v12で「1秒ごとにPCへBLE送信・通信断復旧」を実装。研究目的のリアルタイム表示を成立させるため、この工程を重要な次段階として扱う。</p>
+ <p class="small" style="margin-top:12px">v11の長時間条件は未達のまま明記し、v12の短時間BLE検証を先行した。次の順序：①10分同時動作の照合 ②BLE切断・再接続とSD継続 ③安定電源で1時間から5時間へ ④RAW WAVの波形・スペクトログラム表示 ⑤実シャント音の収音品質検証。</p>
 </section>
 <section id="study">
  <div class="sectionhead"><span class="idx">09 / CLINICAL VALIDATION</span><h2>臨床研究への接続</h2></div>
@@ -300,12 +290,12 @@ svg{max-width:100%;height:auto;display:block}
 </section>
 </main>
 </div>
-<footer>ShuntSound Development Outline 1.3 ｜ 2026.11.03 ｜ 開発・研究用の設計構想。v11.0-bench1の60秒・10分ログ確認済み。10分再試験の正常終了ログ確認済み・5時間未検証。確認結果と計画を区別して記載。参照資料：ShuntSound_BLE_v10.ino、ShuntSound_PC_Monitor_v0.2.html、内部配置レビューv0.8、同日の開発方針。</footer>
+<footer>ShuntSound Development Outline 1.4 ｜ 2026.11.03 ｜ v11：10分正常終了確認・長時間試験は22分51秒で中断。v12：60秒SD＋BLE照合成功・10分試験開始済み／結果待ち。1時間・5時間、実シャント音の品質、臨床予測性能は未確認。原音保持・波形解析・固定利得の方針を追記。</footer>
 <script>
 (function(){
 'use strict';
 const boxes=Array.from(document.querySelectorAll('#acceptanceChecklist input[type="checkbox"]'));
-const key='ShuntSound_Outline_v1_1_checklist_20261103';
+const key='ShuntSound_Outline_v1_4_checklist_20261103';
 try{const saved=JSON.parse(localStorage.getItem(key)||'{}'); boxes.forEach(b=>{if(Object.prototype.hasOwnProperty.call(saved,b.dataset.id)) b.checked=!!saved[b.dataset.id];});}catch(_){/* local storage may be disabled */}
 function update(){
  let done=boxes.filter(b=>b.checked).length;
@@ -326,4 +316,3 @@ update();
 </script>
 </body>
 </html>
-
