@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>ShuntSound — BLE音量モニター</title>
+<style>
+:root{color-scheme:light;--ink:#163344;--muted:#647985;--teal:#087e76;--line:#d5e2e5;--bg:#f2f7f8}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.7 system-ui,"Yu Gothic",sans-serif}main{max-width:1100px;margin:auto;padding:28px 22px 50px}header{border-bottom:1px solid var(--line);padding-bottom:18px;margin-bottom:20px}.kicker{font-size:11px;letter-spacing:.16em;color:var(--teal);font-weight:800}h1{font-size:30px;margin:4px 0}h2{font-size:17px;margin:0 0 12px}p{margin:8px 0}.muted,small{color:var(--muted)}.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;margin:16px 0}.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center}button{font:inherit;font-weight:700;padding:10px 17px;border-radius:9px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer}button.primary{background:var(--teal);color:white;border-color:var(--teal)}button:disabled{opacity:.45;cursor:default}button:focus-visible{outline:3px solid #58c6ba}.status{padding:6px 13px;border-radius:25px;background:#eaf0f2;font-weight:700}.status.good{background:#dff3e9;color:#11634d}.status.warn{background:#fff1d8;color:#855416}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.metric{padding:18px;background:white;border:1px solid var(--line);border-radius:14px}.label{font-size:12px;color:var(--muted)}.value{font-size:34px;font-weight:800;line-height:1.4;font-variant-numeric:tabular-nums}.unit{font-size:12px;color:var(--muted)}.note{background:#e5f4f1;border-left:4px solid var(--teal);padding:12px 16px}.chartwrap{height:260px;position:relative}canvas{width:100%;height:100%;display:block}.details{display:flex;gap:12px 24px;flex-wrap:wrap;font-size:13px}.log{font:12px/1.7 ui-monospace,monospace;max-height:160px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}.message{min-height:28px;color:#80521d}a{color:var(--teal)}@media(max-width:650px){main{padding:20px 14px}.grid{grid-template-columns:1fr 1fr}.value{font-size:28px}h1{font-size:25px}.card{padding:16px}.chartwrap{height:220px}}@media(max-width:390px){.grid{grid-template-columns:1fr}}
+</style></head><body><main>
+<header><div class="kicker">SHUNTSOUND / V12.0-LINK1</div><h1>Bluetooth 音量モニター</h1><p class="muted">実機の直近5秒の音量を、約1秒ごとに受信。原音は本体のSDに保存します。</p></header>
+<div class="note"><strong>初回は60秒テストから。</strong> v12.0-link1は実機未検証です。録音は本体のUSR2で開始します。今動いているv11の5時間テストには書き込まないでください。</div>
+<section class="card"><div class="controls"><button class="primary" id="connect">Bluetoothで接続</button><button id="reconnect" disabled>同じ機器に再接続</button><button id="disconnect" disabled>切断</button><span class="status" id="link" role="status">未接続</span></div><p id="message" class="message" role="status">WindowsのChrome / EdgeでこのHTTPSページを開き、ShuntSound-v12を選択してください。</p><small>接続するだけでは録音は始まりません。切断しても本体のSD録音は続きます。</small></section>
+<div class="grid">
+<div class="metric"><div class="label">音量 AC RMS（DC成分除去）</div><div class="value" id="ac">—</div><div class="unit">PCMカウント / 直近最大5秒</div></div>
+<div class="metric"><div class="label">デジタルレベル</div><div class="value" id="db">—</div><div class="unit">dBFS（音圧dBではありません）</div></div>
+<div class="metric"><div class="label">本体の状態</div><div class="value" style="font-size:23px" id="state">未受信</div><div class="unit" id="elapsed">録音経過 — 秒</div></div>
+</div>
+<section class="card"><div class="controls" style="justify-content:space-between"><h2>音量の推移</h2><span class="muted" id="window">実測データ待ち</span></div><div class="chartwrap"><canvas id="plot" role="img" aria-label="実機から受信した直近180秒のAC RMS音量グラフ"></canvas></div><small>縦軸：AC RMS（PCMカウント）／横軸：録音開始からの秒数。欠落区間は線でつなぎません。</small></section>
+<section class="card"><div class="details"><span>受信した音量行：<strong id="rows">0</strong></span><span>未受信の秒数：<strong id="gaps">0</strong></span><span>クリッピング：<strong id="clip">—</strong></span><span>Fault：<strong id="fault">—</strong></span><span>録音キュー：<strong id="queue">—</strong> / 32</span><span>RAW RMS：<strong id="rms">—</strong></span><span>機器・セッション：<strong id="session">—</strong></span></div><p class="muted" id="freshness">音量データをまだ受信していません。</p><div class="controls"><button id="csv" disabled>音量CSVを保存</button><button id="events" disabled>接続イベントCSVを保存</button><button id="clear">表示・受信記録をクリア</button></div><small>受信記録はこのタブのメモリ内に保持します。閉じる・再読込み前にCSVを保存してください。切断中や接続前の未受信データはこの版では補完しません。SD内のFEATURES.CSVが完全な記録の確認元です。</small></section>
+<details class="card"><summary>接続イベント・使い方</summary><ol><li>v12ファームウェアを実機へ書き込む（v11の長時間試験終了後）。SDを装着し、安定した電源で起動。</li><li>「Bluetoothで接続」でShuntSound-v12を選択。Windows設定での事前ペアリングは不要です。</li><li>本体のUSR2を1回押す。最初は60秒モード。音量・秒数が更新されることを確認。</li><li>切断後は「同じ機器に再接続」。録音は本体側で続きます。欠落は表示されます。</li><li>停止・保存を確認し、PCのCSVとSDログを比較します。</li></ol><pre class="log" id="log"></pre></details>
+<p class="muted"><small>研究開発用。音量の相対変化を表示する試作版です。音圧・血圧・脈拍の測定、医学的な判定は行いません。Bluetooth実機通信・BLE併用時の長時間録音は、これから検証します。</small></p>
+</main>
+<script>
+'use strict';
+const SERVICE='9b350001-1c0e-4ea2-a379-6ca0d8c45f10';
+const CHARACTERISTIC='9b350002-1c0e-4ea2-a379-6ca0d8c45f10';
+function decodePacket(view){
+ if(!(view instanceof DataView)||view.byteLength!==20)throw Error('受信データ長が違います（20バイトが必要）');
+ if(view.getUint8(0)!==1)throw Error('未対応のデータ形式です');
+ const flags=view.getUint8(1),second=view.getUint16(12,true);
+ return {version:1,flags,recording:!!(flags&1),full:!!(flags&2),stopping:!!(flags&4),hasSample:!!(flags&8),fault:view.getUint8(2),queue:view.getUint8(3),boot:view.getUint32(4,true),session:view.getUint32(8,true),second,rms:view.getUint16(14,true),acRms:view.getUint16(16,true),clipFraction:view.getUint16(18,true)/65535};
+}
+class SampleTracker{
+ constructor(){this.reset();}
+ reset(){this.rows=[];this.sessions=new Map();this.missing=0;this.latest=null;}
+ accept(p,iso){
+  this.latest=p;
+  if(!p.hasSample||p.second===0||p.session===0)return null;
+  const key=p.boot+':'+p.session,old=this.sessions.get(key)||0;
+  if(p.second<=old)return null;
+  const gap=p.second-old-1;this.missing+=gap;this.sessions.set(key,p.second);
+  const row={received_at:iso,boot_id:p.boot,session:p.session,second:p.second,window_state:p.full?'FULL':'WARMUP',rms:p.rms,ac_rms:p.acRms,clip_fraction:p.clipFraction,fault:p.fault,queue_blocks:p.queue,recording:p.recording?1:0,gap_before:gap};
+  this.rows.push(row);return row;
+ }
+}
+function csvText(rows,keys){return '\uFEFF'+keys.join(',')+'\r\n'+rows.map(r=>keys.map(k=>'"'+String(r[k]??'').replaceAll('"','""')+'"').join(',')).join('\r\n');}
+if(typeof module!=='undefined')module.exports={decodePacket,SampleTracker,csvText};
+if(typeof window!=='undefined')(()=>{
+ const $=id=>document.getElementById(id),tracker=new SampleTracker();
+ let device=null,characteristic=null,connected=false,busy=false,lastPacketAt=0,lastNewAt=0,connectionEvents=[],lastState='';
+ function log(kind,detail){const e={received_at:new Date().toISOString(),event:kind,detail};connectionEvents.push(e);$('log').textContent=connectionEvents.slice(-60).map(x=>x.received_at+' '+x.event+' '+x.detail).join('\n');$('events').disabled=false;}
+ function buttons(){const supported=!!navigator.bluetooth&&window.isSecureContext;$('connect').disabled=busy||connected||!supported;$('reconnect').disabled=busy||connected||!device||!supported;$('disconnect').disabled=!(connected||busy);}
+ function badge(text,warn=false){$('link').textContent=text;$('link').className='status '+(warn?'warn':connected?'good':'');}
+ function received(view){
+  try{
+   const p=decodePacket(view),now=Date.now();lastPacketAt=now;
+   const row=tracker.accept(p,new Date(now).toISOString());if(row)lastNewAt=now;
+   const state=p.fault?'エラー（Fault '+p.fault+'）':p.stopping?'停止処理中':p.recording?'録音中':p.session?'録音停止':'録音待機';
+   if(state!==lastState){log('DEVICE_STATE',state);lastState=state;}
+   $('state').textContent=state;$('elapsed').textContent='録音経過 '+p.second+' 秒';$('fault').textContent=p.fault;$('queue').textContent=p.queue;
+   $('session').textContent=p.boot.toString(16).padStart(8,'0')+' / '+(p.session?'V12'+String(p.session).padStart(5,'0'):'—');
+   $('window').textContent=p.hasSample?(p.full?'5秒窓':'WARMUP：最初の'+p.second+'秒窓'):'実測データ待ち';
+   $('ac').textContent=p.hasSample?p.acRms.toLocaleString():'—';$('rms').textContent=p.hasSample?p.rms:'—';$('db').textContent=p.hasSample?(p.acRms>0?(20*Math.log10(p.acRms/32768)).toFixed(1):'−∞'):'—';$('clip').textContent=p.hasSample?(p.clipFraction*100).toFixed(3)+'%':'—';
+   $('rows').textContent=tracker.rows.length.toLocaleString();$('gaps').textContent=tracker.missing.toLocaleString();$('csv').disabled=!tracker.rows.length;
+   if(row?.gap_before)log('MISSING_SECONDS',row.gap_before+'秒（接続前・切断中・送信/受信遅延を含む。SDを確認）');
+   if(connected)badge('接続中');if(row)draw();refreshAge();
+  }catch(e){log('PACKET_ERROR',e.message);$('message').textContent=e.message;}
+ }
+ const onValue=e=>received(e.target.value);
+ function onDisconnected(){connected=false;characteristic?.removeEventListener('characteristicvaluechanged',onValue);characteristic=null;badge('切断中',true);$('message').textContent='本体の録音は継続します。「同じ機器に再接続」で再接続できます。';log('DISCONNECTED',device?.name||'');buttons();refreshAge();}
+ async function attach(){
+  const server=await device.gatt.connect(),service=await server.getPrimaryService(SERVICE);
+  const c=await service.getCharacteristic(CHARACTERISTIC);characteristic=c;
+  c.addEventListener('characteristicvaluechanged',onValue);
+  await c.startNotifications();connected=true;lastPacketAt=0;badge('接続中');log('CONNECTED',device.name||'ShuntSound-v12');
+  $('message').textContent='接続しました。本体が待機中ならUSR2を1回押して録音を開始してください。';
+  // A READ may emit characteristicvaluechanged too. Tracker de-duplicates by sample second.
+  try{received(await c.readValue());}catch(e){log('INITIAL_READ',e.message);}
+ }
+ async function connect(reuse){
+  if(busy)return;busy=true;buttons();badge('接続処理中');
+  try{
+   if(!reuse){const selected=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE]}]});if(device)device.removeEventListener('gattserverdisconnected',onDisconnected);device=selected;device.addEventListener('gattserverdisconnected',onDisconnected);}
+   await attach();
+  }catch(e){characteristic?.removeEventListener('characteristicvaluechanged',onValue);characteristic=null;if(device?.gatt.connected)device.gatt.disconnect();connected=false;badge('未接続',true);$('message').textContent=e.name==='NotFoundError'?'機器が選択されませんでした。本体の起動と距離を確認してください。':'接続できませんでした：'+e.message;log('CONNECT_ERROR',e.name+': '+e.message);}
+  finally{busy=false;buttons();}
+ }
+ $('connect').onclick=()=>connect(false);$('reconnect').onclick=()=>connect(true);
+ $('disconnect').onclick=()=>{if(busy&&!connected){$('message').textContent='接続処理が完了するまでお待ちください。';return;}device?.gatt.disconnect();};
+ function refreshAge(){const p=tracker.latest,age=(Date.now()-lastPacketAt)/1000;
+  if(!connected){$('freshness').textContent='未接続：表示は最後に受信した値です。';return;}
+  if(!lastPacketAt||age>4){badge('受信待ち・途絶',true);$('freshness').textContent='通知が4秒以上届いていません。表示は最新ではありません。';return;}
+  if(p?.recording&&p.hasSample&&Date.now()-lastNewAt>4000){badge('音量更新が停止',true);$('freshness').textContent='接続中ですが新しい音量が4秒以上届いていません。本体を確認してください。';return;}
+  badge('接続中');$('freshness').textContent=p?.recording?'通知を受信中。未受信の秒数はSDの欠損数とは異なります。':'本体は録音していません。表示は最後の音量または待機状態です。';
+ }
+ function draw(){
+  const c=$('plot'),rect=c.getBoundingClientRect(),ratio=window.devicePixelRatio||1;c.width=Math.round(rect.width*ratio);c.height=Math.round(rect.height*ratio);const ctx=c.getContext('2d');ctx.scale(ratio,ratio);const W=rect.width,H=rect.height,L=58,R=12,T=16,B=30;ctx.clearRect(0,0,W,H);ctx.font='11px system-ui';ctx.fillStyle='#647985';
+  const p=tracker.latest,rows=p?tracker.rows.filter(r=>r.boot_id===p.boot&&r.session===p.session&&r.second>=p.second-180):[];
+  const max=Math.max(100,...rows.map(r=>r.ac_rms))*1.12,end=Math.max(180,p?.second||0),start=end-180;
+  for(let i=0;i<=4;i++){const y=T+(H-T-B)*i/4;ctx.strokeStyle='#e2eaed';ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-R,y);ctx.stroke();ctx.fillText(Math.round(max*(1-i/4)),3,y+4);}
+  for(let i=0;i<=3;i++){const x=L+(W-L-R)*i/3;ctx.fillText(Math.round(start+180*i/3)+'s',x-10,H-7);}
+  ctx.strokeStyle='#087e76';ctx.lineWidth=2;ctx.beginPath();let prev=null;
+  for(const r of rows){const x=L+(r.second-start)/180*(W-L-R),y=T+(1-r.ac_rms/max)*(H-T-B);if(!prev||r.second!==prev.second+1)ctx.moveTo(x,y);else ctx.lineTo(x,y);prev=r;}ctx.stroke();
+  ctx.fillStyle='#087e76';for(const r of rows){ctx.beginPath();ctx.arc(L+(r.second-start)/180*(W-L-R),T+(1-r.ac_rms/max)*(H-T-B),2,0,Math.PI*2);ctx.fill();}
+  if(!rows.length){ctx.fillStyle='#647985';ctx.fillText('実機の音量データを待っています',L+14,H/2);}
+ }
+ function download(text,name){const url=URL.createObjectURL(new Blob([text],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+ $('csv').onclick=()=>download(csvText(tracker.rows,['received_at','boot_id','session','second','window_state','rms','ac_rms','clip_fraction','fault','queue_blocks','recording','gap_before']),'ShuntSound_BLE_'+new Date().toISOString().replaceAll(':','-')+'.csv');
+ $('events').onclick=()=>download(csvText(connectionEvents,['received_at','event','detail']),'ShuntSound_BLE_events.csv');
+ $('clear').onclick=()=>{if(!confirm('受信記録を消去します。必要なCSVは保存しましたか？'))return;tracker.reset();connectionEvents=[];lastNewAt=0;lastState='';$('rows').textContent='0';$('gaps').textContent='0';$('csv').disabled=true;$('events').disabled=true;$('log').textContent='';for(const id of ['ac','rms','db','clip','fault','queue','session'])$(id).textContent='—';$('state').textContent='受信待ち';$('window').textContent='実測データ待ち';draw();};
+ if(!window.isSecureContext)$('message').textContent='HTTPSで開いてください。ZIP同梱の手順に公開ページのURLがあります。';else if(!navigator.bluetooth)$('message').textContent='このブラウザはWeb Bluetoothに対応していません。WindowsのChrome / Edgeを使ってください。';
+ window.addEventListener('beforeunload',e=>{if(tracker.rows.length){e.preventDefault();e.returnValue='';}});
+ window.addEventListener('resize',draw);setInterval(refreshAge,1000);buttons();draw();
+})();
+</script></body></html>
